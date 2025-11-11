@@ -1,0 +1,155 @@
+{
+  "common": {
+    "welcome": "مرحباً",
+    "login": "تسجيل الدخول",
+    "logout": "تسجيل الخروج",
+    "dashboard": "لوحة التحكم",
+    "settings": "الإعدادات",
+    "search": "بحث",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "view": "عرض",
+    "back": "رجوع",
+    "next": "التالي",
+    "loading": "جاري التحميل...",
+    "error": "خطأ",
+    "success": "نجح",
+    "getStarted": "ابدأ",
+    "learnMore": "اعرف المزيد",
+    "joinYourGroup": "انضم إلى مجموعتك",
+    "filter": "تصفية",
+    "export": "تصدير",
+    "download": "تحميل",
+    "approve": "الموافقة",
+    "reject": "رفض",
+    "submit": "إرسال",
+    "close": "إغلاق",
+    "confirm": "تأكيد",
+    "yes": "نعم",
+    "no": "لا"
+  },
+  "dashboard": {
+    "welcomeBack": "مرحباً بعودتك",
+    "totalSavings": "إجمالي المدخرات",
+    "loans": "القروض",
+    "creditScore": "نقاط الائتمان",
+    "quickActions": "إجراءات سريعة",
+    "recentTransactions": "المعاملات الأخيرة",
+    "transactionHistory": "سجل المعاملات",
+    "viewAll": "عرض الكل",
+    "mySavings": "مدخراتي",
+    "myLoans": "قروضي",
+    "transactions": "المعاملات",
+    "fines": "الغرامات",
+    "learnGrow": "تعلم ونم",
+    "voting": "التصويت",
+    "myGroup": "مجموعتي",
+    "groupChat": "دردشة المجموعة",
+    "support": "الدعم",
+    "chat": "دردشة",
+    "noTransactions": "لم يتم العثور على معاملات",
+    "all": "الكل",
+    "pending": "قيد الانتظار",
+    "completed": "مكتمل",
+    "active": "نشط",
+    "inactive": "غير نشط"
+  },
+  "landing": {
+    "heroTitle": "تمكين مجتمعات الادخار في رواندا رقمياً",
+    "heroSubtitle": "نبني مستقبل مجتمعات الادخار",
+    "heroDescription": "ربط مجموعات الادخار إبيمينا في رواندا مع البنوك من خلال منصة تمويل صغير رقمية آمنة وذكية وسهلة الاستخدام.",
+    "featuresTitle": "ميزات قوية",
+    "featuresSubtitle": "كل ما تحتاجه لإدارة مجموعة الادخار الخاصة بك رقمياً",
+    "ctaTitle": "هل أنت مستعد لتحويل مجموعة الادخار الخاصة بك؟",
+    "ctaDescription": "انضم إلى آلاف مجموعات إبيمينا التي تستخدم بالفعل محفظة أومورينج",
+    "emailPlaceholder": "أدخل بريدك الإلكتروني",
+    "footerCopyright": "© 2024 محفظة أومورينج. جميع الحقوق محفوظة."
+  },
+  "navigation": {
+    "about": "حول",
+    "features": "الميزات",
+    "contact": "اتصل",
+    "help": "مساعدة"
+  },
+  "features": {
+    "mobileMoney": {
+      "title": "تكامل النقود المحمولة",
+      "desc": "اتصال سلس مع MTN و Airtel"
+    },
+    "aiCredit": {
+      "title": "تقييم الائتمان بالذكاء الاصطناعي",
+      "desc": "توصيات قروض ذكية بناءً على سجلّك"
+    },
+    "secure": {
+      "title": "آمن وشفاف",
+      "desc": "تشفير من طرف إلى طرف وشفافية كاملة"
+    },
+    "groupManagement": {
+      "title": "إدارة المجموعات",
+      "desc": "مجموعات الادخار إبيمينا المتصلة"
+    },
+    "analytics": {
+      "title": "تحليلات ذكية",
+      "desc": "رؤى مدعومة بالذكاء الاصطناعي"
+    },
+    "chat": {
+      "title": "دردشة فورية",
+      "desc": "تواصل فوري داخل المجموعات"
+    }
+  },
+  "stats": {
+    "activeGroups": "المجموعات النشطة",
+    "members": "الأعضاء",
+    "savings": "المدخرات",
+    "loansDisbursed": "القروض الممنوحة"
+  },
+  "member": {
+    "dashboard": "لوحة تحكم العضو",
+    "savings": "مدخراتي",
+    "loans": "قروضي",
+    "transactions": "المعاملات",
+    "fines": "الغرامات",
+    "learnGrow": "تعلم ونم",
+    "voting": "تصويت المجموعة",
+    "myGroup": "مجموعتي",
+    "support": "الدعم",
+    "requestLoan": "طلب قرض",
+    "makeContribution": "تقديم مساهمة",
+    "viewDetails": "عرض التفاصيل",
+    "amount": "المبلغ",
+    "date": "التاريخ",
+    "status": "الحالة",
+    "type": "النوع",
+    "purpose": "الغرض",
+    "duration": "المدة",
+    "monthlyPayment": "الدفع الشهري",
+    "remaining": "المتبقي"
+  },
+  "groupAdmin": {
+    "dashboard": "إدارة المجموعة",
+    "manageMembers": "إدارة الأعضاء",
+    "loanRequests": "طلبات القروض",
+    "contributions": "المساهمات",
+    "fines": "الغرامات",
+    "meetings": "الاجتماعات",
+    "voting": "تصويت المجموعة",
+    "analytics": "التحليلات",
+    "announcements": "الإعلانات",
+    "applications": "الطلبات",
+    "agentSupport": "دعم الوكيل",
+    "totalMembers": "إجمالي الأعضاء",
+    "activeLoans": "القروض النشطة",
+    "pendingApprovals": "الموافقات المعلقة",
+    "groupSavings": "مدخرات المجموعة",
+    "recentActivities": "الأنشطة الأخيرة",
+    "addMember": "إضافة عضو جديد",
+    "viewAllMembers": "عرض جميع الأعضاء",
+    "viewAllLoans": "عرض جميع طلبات القروض",
+    "createAnnouncement": "إنشاء إعلان جديد",
+    "scheduleMeeting": "جدولة اجتماع",
+    "createVote": "إنشاء تصويت جديد"
+  }
+}
+

@@ -1,0 +1,155 @@
+{
+  "common": {
+    "welcome": "Bienvenue",
+    "login": "Connexion",
+    "logout": "Déconnexion",
+    "dashboard": "Tableau de bord",
+    "settings": "Paramètres",
+    "search": "Rechercher",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "view": "Voir",
+    "back": "Retour",
+    "next": "Suivant",
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "getStarted": "Commencer",
+    "learnMore": "En savoir plus",
+    "joinYourGroup": "Rejoignez votre groupe",
+    "filter": "Filtrer",
+    "export": "Exporter",
+    "download": "Télécharger",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "submit": "Soumettre",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "yes": "Oui",
+    "no": "Non"
+  },
+  "dashboard": {
+    "welcomeBack": "Bon retour",
+    "totalSavings": "Épargne totale",
+    "loans": "Prêts",
+    "creditScore": "Score de crédit",
+    "quickActions": "Actions rapides",
+    "recentTransactions": "Transactions récentes",
+    "transactionHistory": "Historique des transactions",
+    "viewAll": "Voir tout",
+    "mySavings": "Mes épargnes",
+    "myLoans": "Mes prêts",
+    "transactions": "Transactions",
+    "fines": "Amendes",
+    "learnGrow": "Apprendre et grandir",
+    "voting": "Vote",
+    "myGroup": "Mon groupe",
+    "groupChat": "Chat de groupe",
+    "support": "Support",
+    "chat": "Chat",
+    "noTransactions": "Aucune transaction trouvée",
+    "all": "Tout",
+    "pending": "En attente",
+    "completed": "Terminé",
+    "active": "Actif",
+    "inactive": "Inactif"
+  },
+  "landing": {
+    "heroTitle": "Autonomiser les communautés d'épargne du Rwanda numériquement",
+    "heroSubtitle": "Construisons un avenir pour les communautés d'épargne",
+    "heroDescription": "Connectez les groupes d'épargne Ibimina du Rwanda avec les banques grâce à une plateforme de microfinance numérique sécurisée, intelligente et conviviale.",
+    "featuresTitle": "Fonctionnalités puissantes",
+    "featuresSubtitle": "Tout ce dont vous avez besoin pour gérer votre groupe d'épargne numériquement",
+    "ctaTitle": "Prêt à transformer votre groupe d'épargne?",
+    "ctaDescription": "Rejoignez des milliers de groupes Ibimina qui utilisent déjà UMURENGE WALLET",
+    "emailPlaceholder": "Entrez votre email",
+    "footerCopyright": "© 2024 UMURENGE WALLET. Tous droits réservés."
+  },
+  "navigation": {
+    "about": "À propos",
+    "features": "Fonctionnalités",
+    "contact": "Contact",
+    "help": "Aide"
+  },
+  "features": {
+    "mobileMoney": {
+      "title": "Intégration Mobile Money",
+      "desc": "Connexion transparente avec MTN et Airtel"
+    },
+    "aiCredit": {
+      "title": "Scoring de crédit IA",
+      "desc": "Recommandations de prêt intelligentes basées sur votre historique"
+    },
+    "secure": {
+      "title": "Sécurisé et transparent",
+      "desc": "Chiffrement de bout en bout et transparence totale"
+    },
+    "groupManagement": {
+      "title": "Gestion de groupe",
+      "desc": "Groupes d'épargne Ikimina connectés"
+    },
+    "analytics": {
+      "title": "Analyses intelligentes",
+      "desc": "Insights alimentés par l'IA"
+    },
+    "chat": {
+      "title": "Chat en temps réel",
+      "desc": "Communication instantanée dans les groupes"
+    }
+  },
+  "stats": {
+    "activeGroups": "Groupes actifs",
+    "members": "Membres",
+    "savings": "Épargnes",
+    "loansDisbursed": "Prêts accordés"
+  },
+  "member": {
+    "dashboard": "Tableau de bord membre",
+    "savings": "Mes épargnes",
+    "loans": "Mes prêts",
+    "transactions": "Transactions",
+    "fines": "Amendes",
+    "learnGrow": "Apprendre et grandir",
+    "voting": "Vote de groupe",
+    "myGroup": "Mon groupe",
+    "support": "Support",
+    "requestLoan": "Demander un prêt",
+    "makeContribution": "Faire une contribution",
+    "viewDetails": "Voir les détails",
+    "amount": "Montant",
+    "date": "Date",
+    "status": "Statut",
+    "type": "Type",
+    "purpose": "Objectif",
+    "duration": "Durée",
+    "monthlyPayment": "Paiement mensuel",
+    "remaining": "Restant"
+  },
+  "groupAdmin": {
+    "dashboard": "Administration de groupe",
+    "manageMembers": "Gérer les membres",
+    "loanRequests": "Demandes de prêt",
+    "contributions": "Contributions",
+    "fines": "Amendes",
+    "meetings": "Réunions",
+    "voting": "Vote de groupe",
+    "analytics": "Analyses",
+    "announcements": "Annonces",
+    "applications": "Demandes",
+    "agentSupport": "Support agent",
+    "totalMembers": "Total des membres",
+    "activeLoans": "Prêts actifs",
+    "pendingApprovals": "Approbations en attente",
+    "groupSavings": "Épargnes du groupe",
+    "recentActivities": "Activités récentes",
+    "addMember": "Ajouter un nouveau membre",
+    "viewAllMembers": "Voir tous les membres",
+    "viewAllLoans": "Voir toutes les demandes de prêt",
+    "createAnnouncement": "Créer une nouvelle annonce",
+    "scheduleMeeting": "Planifier une réunion",
+    "createVote": "Créer un nouveau vote"
+  }
+}
+

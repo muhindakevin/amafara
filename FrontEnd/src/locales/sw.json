@@ -1,0 +1,155 @@
+{
+  "common": {
+    "welcome": "Karibu",
+    "login": "Ingia",
+    "logout": "Toka",
+    "dashboard": "Dashibodi",
+    "settings": "Mipangilio",
+    "search": "Tafuta",
+    "cancel": "Ghairi",
+    "save": "Hifadhi",
+    "edit": "Hariri",
+    "delete": "Futa",
+    "view": "Angalia",
+    "back": "Rudi",
+    "next": "Ifuatayo",
+    "loading": "Inapakia...",
+    "error": "Hitilafu",
+    "success": "Imefanikiwa",
+    "getStarted": "Anza",
+    "learnMore": "Jifunze Zaidi",
+    "joinYourGroup": "Jiunge na Kikundi Chako",
+    "filter": "Chuja",
+    "export": "Toa",
+    "download": "Pakua",
+    "approve": "Idhinisha",
+    "reject": "Kataa",
+    "submit": "Wasilisha",
+    "close": "Funga",
+    "confirm": "Thibitisha",
+    "yes": "Ndio",
+    "no": "Hapana"
+  },
+  "dashboard": {
+    "welcomeBack": "Karibu tena",
+    "totalSavings": "Akiba Jumla",
+    "loans": "Mikopo",
+    "creditScore": "Alama ya Mkopo",
+    "quickActions": "Vitendo vya Haraka",
+    "recentTransactions": "Miamala ya Hivi Karibuni",
+    "transactionHistory": "Historia ya Miamala",
+    "viewAll": "Angalia Zote",
+    "mySavings": "Akiba Zangu",
+    "myLoans": "Mikopo Yangu",
+    "transactions": "Miamala",
+    "fines": "Faini",
+    "learnGrow": "Jifunze na Ukue",
+    "voting": "Kupiga Kura",
+    "myGroup": "Kikundi Changu",
+    "groupChat": "Mazungumzo ya Kikundi",
+    "support": "Msaada",
+    "chat": "Mazungumzo",
+    "noTransactions": "Hakuna miamala iliyopatikana",
+    "all": "Zote",
+    "pending": "Inasubiri",
+    "completed": "Imeanza",
+    "active": "Inaendelea",
+    "inactive": "Haipo"
+  },
+  "landing": {
+    "heroTitle": "Kuwawezesha Jumuiya za Akiba za Rwanda Kidijitali",
+    "heroSubtitle": "Tunaijenga kesho ya vikundi vya akiba",
+    "heroDescription": "Unganisha vikundi vya akiba vya Ibimina vya Rwanda na benki kupitia jukwaa la kidijitali la mikopo midogo, salama, lenye akili, na linalofaa kwa watumiaji.",
+    "featuresTitle": "Vipengele vya Nguvu",
+    "featuresSubtitle": "Kila kitu unachohitaji kusimamia kikundi chako cha akiba kidijitali",
+    "ctaTitle": "Tayari Kubadilisha Kikundi Chako cha Akiba?",
+    "ctaDescription": "Jiunge na maelfu ya vikundi vya Ibimina vinavyotumia UMURENGE WALLET",
+    "emailPlaceholder": "Weka barua pepe yako",
+    "footerCopyright": "© 2024 UMURENGE WALLET. Haki zote zimehifadhiwa."
+  },
+  "navigation": {
+    "about": "Kuhusu",
+    "features": "Vipengele",
+    "contact": "Wasiliana",
+    "help": "Msaada"
+  },
+  "features": {
+    "mobileMoney": {
+      "title": "Uunganishaji wa Pesa za Simu",
+      "desc": "Uunganishaji wa laini na MTN na Airtel"
+    },
+    "aiCredit": {
+      "title": "Uwekaji Alama wa Mkopo wa AI",
+      "desc": "Mapendekezo ya mkopo ya akili kulingana na historia yako"
+    },
+    "secure": {
+      "title": "Salama na Wazi",
+      "desc": "Usimbaji wa mwisho hadi mwisho na uwazi kamili"
+    },
+    "groupManagement": {
+      "title": "Usimamizi wa Vikundi",
+      "desc": "Vikundi vya akiba vya Ibimina vimeunganishwa"
+    },
+    "analytics": {
+      "title": "Uchambuzi wa Akili",
+      "desc": "Ufahamu unaotolewa na AI"
+    },
+    "chat": {
+      "title": "Mazungumzo ya Wakati Halisi",
+      "desc": "Mawasiliano ya haraka ndani ya vikundi"
+    }
+  },
+  "stats": {
+    "activeGroups": "Vikundi Vinavyofanya Kazi",
+    "members": "Wanachama",
+    "savings": "Akiba",
+    "loansDisbursed": "Mikopo Iliyotolewa"
+  },
+  "member": {
+    "dashboard": "Dashibodi ya Mwanachama",
+    "savings": "Akiba Zangu",
+    "loans": "Mikopo Yangu",
+    "transactions": "Miamala",
+    "fines": "Faini",
+    "learnGrow": "Jifunze na Ukue",
+    "voting": "Kupiga Kura ya Kikundi",
+    "myGroup": "Kikundi Changu",
+    "support": "Msaada",
+    "requestLoan": "Omba Mkopo",
+    "makeContribution": "Toa Mchango",
+    "viewDetails": "Angalia Maelezo",
+    "amount": "Kiasi",
+    "date": "Tarehe",
+    "status": "Hali",
+    "type": "Aina",
+    "purpose": "Lengo",
+    "duration": "Muda",
+    "monthlyPayment": "Malipo ya Kilimo",
+    "remaining": "Zilizobaki"
+  },
+  "groupAdmin": {
+    "dashboard": "Utawala wa Kikundi",
+    "manageMembers": "Simamia Wanachama",
+    "loanRequests": "Maombi ya Mkopo",
+    "contributions": "Michango",
+    "fines": "Faini",
+    "meetings": "Mikutano",
+    "voting": "Kupiga Kura ya Kikundi",
+    "analytics": "Uchambuzi",
+    "announcements": "Matangazo",
+    "applications": "Maombi",
+    "agentSupport": "Msaada wa Wakala",
+    "totalMembers": "Wanachama Wote",
+    "activeLoans": "Mikopo Inayofanya Kazi",
+    "pendingApprovals": "Idhini za Kusubiri",
+    "groupSavings": "Akiba za Kikundi",
+    "recentActivities": "Shughuli za Hivi Karibuni",
+    "addMember": "Ongeza Mwanachama Mpya",
+    "viewAllMembers": "Angalia Wanachama Wote",
+    "viewAllLoans": "Angalia Maombi Yote ya Mkopo",
+    "createAnnouncement": "Tengeneza Tangazo Jipya",
+    "scheduleMeeting": "Ratiba Mikutano",
+    "createVote": "Tengeneza Kura Mpya"
+  }
+}
+

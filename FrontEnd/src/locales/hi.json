@@ -1,0 +1,155 @@
+{
+  "common": {
+    "welcome": "स्वागत है",
+    "login": "लॉग इन",
+    "logout": "लॉग आउट",
+    "dashboard": "डैशबोर्ड",
+    "settings": "सेटिंग्स",
+    "search": "खोजें",
+    "cancel": "रद्द करें",
+    "save": "सेव करें",
+    "edit": "संपादित करें",
+    "delete": "हटाएं",
+    "view": "देखें",
+    "back": "वापस",
+    "next": "अगला",
+    "loading": "लोड हो रहा है...",
+    "error": "त्रुटि",
+    "success": "सफल",
+    "getStarted": "शुरू करें",
+    "learnMore": "और जानें",
+    "joinYourGroup": "अपने समूह में शामिल हों",
+    "filter": "फ़िल्टर करें",
+    "export": "निर्यात करें",
+    "download": "डाउनलोड करें",
+    "approve": "अनुमोदन",
+    "reject": "अस्वीकार",
+    "submit": "जमा करें",
+    "close": "बंद करें",
+    "confirm": "पुष्टि करें",
+    "yes": "हाँ",
+    "no": "नहीं"
+  },
+  "dashboard": {
+    "welcomeBack": "वापसी पर स्वागत है",
+    "totalSavings": "कुल बचत",
+    "loans": "ऋण",
+    "creditScore": "क्रेडिट स्कोर",
+    "quickActions": "त्वरित कार्रवाई",
+    "recentTransactions": "हाल की लेनदेन",
+    "transactionHistory": "लेनदेन इतिहास",
+    "viewAll": "सभी देखें",
+    "mySavings": "मेरी बचत",
+    "myLoans": "मेरे ऋण",
+    "transactions": "लेनदेन",
+    "fines": "जुर्माना",
+    "learnGrow": "सीखें और बढ़ें",
+    "voting": "मतदान",
+    "myGroup": "मेरा समूह",
+    "groupChat": "समूह चैट",
+    "support": "सहायता",
+    "chat": "चैट",
+    "noTransactions": "कोई लेनदेन नहीं मिला",
+    "all": "सभी",
+    "pending": "लंबित",
+    "completed": "पूर्ण",
+    "active": "सक्रिय",
+    "inactive": "निष्क्रिय"
+  },
+  "landing": {
+    "heroTitle": "रवांडा की बचत समुदायों को डिजिटल रूप से सशक्त बनाना",
+    "heroSubtitle": "बचत समुदायों के लिए भविष्य का निर्माण",
+    "heroDescription": "एक सुरक्षित, बुद्धिमान और उपयोगकर्ता के अनुकूल डिजिटल माइक्रोफाइनेंस प्लेटफॉर्म के माध्यम से रवांडा के इबिमीना बचत समूहों को बैंकों से जोड़ें।",
+    "featuresTitle": "शक्तिशाली सुविधाएं",
+    "featuresSubtitle": "अपने बचत समूह को डिजिटल रूप से प्रबंधित करने के लिए आपको जो कुछ भी चाहिए",
+    "ctaTitle": "अपने बचत समूह को बदलने के लिए तैयार हैं?",
+    "ctaDescription": "हजारों इबिमीना समूहों में शामिल हों जो पहले से ही उमुरेन्ज वॉलेट का उपयोग कर रहे हैं",
+    "emailPlaceholder": "अपना ईमेल दर्ज करें",
+    "footerCopyright": "© 2024 उमुरेन्ज वॉलेट। सभी अधिकार सुरक्षित।"
+  },
+  "navigation": {
+    "about": "के बारे में",
+    "features": "सुविधाएं",
+    "contact": "संपर्क करें",
+    "help": "मदद"
+  },
+  "features": {
+    "mobileMoney": {
+      "title": "मोबाइल मनी एकीकरण",
+      "desc": "MTN और Airtel के साथ निर्बाध कनेक्शन"
+    },
+    "aiCredit": {
+      "title": "AI क्रेडिट स्कोरिंग",
+      "desc": "आपके इतिहास के आधार पर स्मार्ट ऋण सिफारिशें"
+    },
+    "secure": {
+      "title": "सुरक्षित और पारदर्शी",
+      "desc": "एंड-टू-एंड एन्क्रिप्शन और पूर्ण पारदर्शिता"
+    },
+    "groupManagement": {
+      "title": "समूह प्रबंधन",
+      "desc": "जुड़े हुए इबिमीना बचत समूह"
+    },
+    "analytics": {
+      "title": "स्मार्ट एनालिटिक्स",
+      "desc": "AI संचालित अंतर्दृष्टि और रिपोर्ट"
+    },
+    "chat": {
+      "title": "रीयल-टाइम चैट",
+      "desc": "समूहों के भीतर तत्काल संचार"
+    }
+  },
+  "stats": {
+    "activeGroups": "सक्रिय समूह",
+    "members": "सदस्य",
+    "savings": "बचत",
+    "loansDisbursed": "वितरित ऋण"
+  },
+  "member": {
+    "dashboard": "सदस्य डैशबोर्ड",
+    "savings": "मेरी बचत",
+    "loans": "मेरे ऋण",
+    "transactions": "लेनदेन",
+    "fines": "जुर्माना",
+    "learnGrow": "सीखें और बढ़ें",
+    "voting": "समूह मतदान",
+    "myGroup": "मेरा समूह",
+    "support": "सहायता",
+    "requestLoan": "ऋण अनुरोध करें",
+    "makeContribution": "योगदान दें",
+    "viewDetails": "विवरण देखें",
+    "amount": "राशि",
+    "date": "तारीख",
+    "status": "स्थिति",
+    "type": "प्रकार",
+    "purpose": "उद्देश्य",
+    "duration": "अवधि",
+    "monthlyPayment": "मासिक भुगतान",
+    "remaining": "शेष"
+  },
+  "groupAdmin": {
+    "dashboard": "समूह प्रशासन",
+    "manageMembers": "सदस्यों का प्रबंधन",
+    "loanRequests": "ऋण अनुरोध",
+    "contributions": "योगदान",
+    "fines": "जुर्माना",
+    "meetings": "बैठकें",
+    "voting": "समूह मतदान",
+    "analytics": "विश्लेषिकी",
+    "announcements": "घोषणाएं",
+    "applications": "आवेदन",
+    "agentSupport": "एजेंट सहायता",
+    "totalMembers": "कुल सदस्य",
+    "activeLoans": "सक्रिय ऋण",
+    "pendingApprovals": "लंबित अनुमोदन",
+    "groupSavings": "समूह बचत",
+    "recentActivities": "हाल की गतिविधियां",
+    "addMember": "नया सदस्य जोड़ें",
+    "viewAllMembers": "सभी सदस्य देखें",
+    "viewAllLoans": "सभी ऋण अनुरोध देखें",
+    "createAnnouncement": "नई घोषणा बनाएं",
+    "scheduleMeeting": "बैठक शेड्यूल करें",
+    "createVote": "नया मतदान बनाएं"
+  }
+}
+

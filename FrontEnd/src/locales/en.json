@@ -1,0 +1,156 @@
+{
+  "common": {
+    "welcome": "Welcome",
+    "login": "Login",
+    "logout": "Logout",
+    "dashboard": "Dashboard",
+    "settings": "Settings",
+    "search": "Search",
+    "cancel": "Cancel",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "view": "View",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "getStarted": "Get Started",
+    "learnMore": "Learn More",
+    "joinYourGroup": "Join Your Group",
+    "filter": "Filter",
+    "export": "Export",
+    "download": "Download",
+    "approve": "Approve",
+    "reject": "Reject",
+    "submit": "Submit",
+    "close": "Close",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "dashboard": {
+    "welcomeBack": "Welcome back",
+    "totalSavings": "Total Savings",
+    "loans": "Loans",
+    "creditScore": "Credit Score",
+    "quickActions": "Quick Actions",
+    "recentTransactions": "Recent Transactions",
+    "transactionHistory": "Transaction History",
+    "viewAll": "View All",
+    "mySavings": "My Savings",
+    "myLoans": "My Loans",
+    "transactions": "Transactions",
+    "fines": "Fines",
+    "learnGrow": "Learn & Grow",
+    "voting": "Voting",
+    "myGroup": "My Group",
+    "groupChat": "Group Chat",
+    "support": "Support",
+    "chat": "Chat",
+    "noTransactions": "No transactions found",
+    "all": "All",
+    "pending": "Pending",
+    "completed": "Completed",
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "landing": {
+    "heroTitle": "Empowering Rwanda's Saving Communities Digitally",
+    "heroSubtitle": "Building a future for saving communities",
+    "heroDescription": "Connect Rwanda's Ibimina saving groups with banks through a secure, intelligent, and user-friendly digital microfinance platform.",
+    "featuresTitle": "Powerful Features",
+    "featuresSubtitle": "Everything you need to manage your saving group digitally",
+    "ctaTitle": "Ready to Transform Your Saving Group?",
+    "ctaDescription": "Join thousands of Ibimina groups already using UMURENGE WALLET",
+    "emailPlaceholder": "Enter your email",
+    "footerCopyright": "© 2024 UMURENGE WALLET. All rights reserved."
+  },
+  "navigation": {
+    "about": "About",
+    "features": "Features",
+    "contact": "Contact",
+    "help": "Help"
+  },
+  "features": {
+    "mobileMoney": {
+      "title": "Mobile Money Integration",
+      "desc": "Seamless connection with MTN & Airtel"
+    },
+    "aiCredit": {
+      "title": "AI Credit Scoring",
+      "desc": "Smart loan recommendations based on your history"
+    },
+    "secure": {
+      "title": "Secure & Transparent",
+      "desc": "End-to-end encryption and full transparency"
+    },
+    "groupManagement": {
+      "title": "Group Management",
+      "desc": "Connected Ibimina saving groups"
+    },
+    "analytics": {
+      "title": "Smart Analytics",
+      "desc": "AI-powered insights and reports"
+    },
+    "chat": {
+      "title": "Real-time Chat",
+      "desc": "Instant communication within groups"
+    }
+  },
+  "stats": {
+    "activeGroups": "Active Groups",
+    "members": "Members",
+    "savings": "Savings",
+    "loansDisbursed": "Loans Disbursed"
+  },
+  "member": {
+    "dashboard": "Member Dashboard",
+    "savings": "My Savings",
+    "loans": "My Loans",
+    "transactions": "Transactions",
+    "fines": "Fines & Penalties",
+    "learnGrow": "Learn & Grow",
+    "voting": "Group Voting",
+    "myGroup": "My Group",
+    "support": "Support",
+    "requestLoan": "Request Loan",
+    "makeContribution": "Make Contribution",
+    "viewDetails": "View Details",
+    "amount": "Amount",
+    "date": "Date",
+    "status": "Status",
+    "type": "Type",
+    "purpose": "Purpose",
+    "duration": "Duration",
+    "monthlyPayment": "Monthly Payment",
+    "remaining": "Remaining"
+  },
+  "groupAdmin": {
+    "dashboard": "Group Administration",
+    "manageMembers": "Manage Members",
+    "loanRequests": "Loan Requests",
+    "contributions": "Contributions",
+    "fines": "Fines & Penalties",
+    "meetings": "Meetings",
+    "voting": "Group Voting",
+    "analytics": "Analytics",
+    "announcements": "Announcements",
+    "applications": "Applications",
+    "agentSupport": "Agent Support",
+    "totalMembers": "Total Members",
+    "activeLoans": "Active Loans",
+    "pendingApprovals": "Pending Approvals",
+    "groupSavings": "Group Savings",
+    "recentActivities": "Recent Activities",
+    "addMember": "Add New Member",
+    "viewAllMembers": "View All Members",
+    "viewAllLoans": "View All Loan Requests",
+    "createAnnouncement": "Create New Announcement",
+    "scheduleMeeting": "Schedule Meeting",
+    "createVote": "Create New Vote"
+  }
+}
+

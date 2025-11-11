@@ -1,0 +1,155 @@
+{
+  "common": {
+    "welcome": "欢迎",
+    "login": "登录",
+    "logout": "登出",
+    "dashboard": "仪表板",
+    "settings": "设置",
+    "search": "搜索",
+    "cancel": "取消",
+    "save": "保存",
+    "edit": "编辑",
+    "delete": "删除",
+    "view": "查看",
+    "back": "返回",
+    "next": "下一步",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "getStarted": "开始",
+    "learnMore": "了解更多",
+    "joinYourGroup": "加入您的小组",
+    "filter": "筛选",
+    "export": "导出",
+    "download": "下载",
+    "approve": "批准",
+    "reject": "拒绝",
+    "submit": "提交",
+    "close": "关闭",
+    "confirm": "确认",
+    "yes": "是",
+    "no": "否"
+  },
+  "dashboard": {
+    "welcomeBack": "欢迎回来",
+    "totalSavings": "总储蓄",
+    "loans": "贷款",
+    "creditScore": "信用评分",
+    "quickActions": "快速操作",
+    "recentTransactions": "最近交易",
+    "transactionHistory": "交易历史",
+    "viewAll": "查看全部",
+    "mySavings": "我的储蓄",
+    "myLoans": "我的贷款",
+    "transactions": "交易",
+    "fines": "罚款",
+    "learnGrow": "学习与成长",
+    "voting": "投票",
+    "myGroup": "我的小组",
+    "groupChat": "小组聊天",
+    "support": "支持",
+    "chat": "聊天",
+    "noTransactions": "未找到交易",
+    "all": "全部",
+    "pending": "待处理",
+    "completed": "已完成",
+    "active": "活跃",
+    "inactive": "不活跃"
+  },
+  "landing": {
+    "heroTitle": "数字化赋能卢旺达储蓄社区",
+    "heroSubtitle": "为储蓄社区建设未来",
+    "heroDescription": "通过安全、智能、用户友好的数字小额信贷平台，将卢旺达的伊比米娜储蓄小组与银行连接起来。",
+    "featuresTitle": "强大功能",
+    "featuresSubtitle": "数字化管理储蓄小组所需的一切",
+    "ctaTitle": "准备好转变您的储蓄小组了吗？",
+    "ctaDescription": "加入数千个已经在使用乌穆伦格钱包的伊比米娜小组",
+    "emailPlaceholder": "输入您的电子邮件",
+    "footerCopyright": "© 2024 乌穆伦格钱包。保留所有权利。"
+  },
+  "navigation": {
+    "about": "关于",
+    "features": "功能",
+    "contact": "联系",
+    "help": "帮助"
+  },
+  "features": {
+    "mobileMoney": {
+      "title": "手机支付集成",
+      "desc": "与 MTN 和 Airtel 无缝连接"
+    },
+    "aiCredit": {
+      "title": "AI 信用评分",
+      "desc": "基于您的历史记录的智能贷款建议"
+    },
+    "secure": {
+      "title": "安全透明",
+      "desc": "端到端加密和完全透明"
+    },
+    "groupManagement": {
+      "title": "小组管理",
+      "desc": "已连接的伊比米娜储蓄小组"
+    },
+    "analytics": {
+      "title": "智能分析",
+      "desc": "AI 驱动的洞察和报告"
+    },
+    "chat": {
+      "title": "实时聊天",
+      "desc": "小组内即时通讯"
+    }
+  },
+  "stats": {
+    "activeGroups": "活跃小组",
+    "members": "成员",
+    "savings": "储蓄",
+    "loansDisbursed": "已发放贷款"
+  },
+  "member": {
+    "dashboard": "成员仪表板",
+    "savings": "我的储蓄",
+    "loans": "我的贷款",
+    "transactions": "交易",
+    "fines": "罚款",
+    "learnGrow": "学习与成长",
+    "voting": "小组投票",
+    "myGroup": "我的小组",
+    "support": "支持",
+    "requestLoan": "申请贷款",
+    "makeContribution": "做出贡献",
+    "viewDetails": "查看详情",
+    "amount": "金额",
+    "date": "日期",
+    "status": "状态",
+    "type": "类型",
+    "purpose": "目的",
+    "duration": "期限",
+    "monthlyPayment": "月付款",
+    "remaining": "剩余"
+  },
+  "groupAdmin": {
+    "dashboard": "小组管理",
+    "manageMembers": "管理成员",
+    "loanRequests": "贷款申请",
+    "contributions": "贡献",
+    "fines": "罚款",
+    "meetings": "会议",
+    "voting": "小组投票",
+    "analytics": "分析",
+    "announcements": "公告",
+    "applications": "申请",
+    "agentSupport": "代理支持",
+    "totalMembers": "总成员数",
+    "activeLoans": "活跃贷款",
+    "pendingApprovals": "待审批",
+    "groupSavings": "小组储蓄",
+    "recentActivities": "最近活动",
+    "addMember": "添加新成员",
+    "viewAllMembers": "查看所有成员",
+    "viewAllLoans": "查看所有贷款申请",
+    "createAnnouncement": "创建新公告",
+    "scheduleMeeting": "安排会议",
+    "createVote": "创建新投票"
+  }
+}
+

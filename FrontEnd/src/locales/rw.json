@@ -1,0 +1,155 @@
+{
+  "common": {
+    "welcome": "Murakaza neza",
+    "login": "Injira",
+    "logout": "Sohoka",
+    "dashboard": "Ikiganiro",
+    "settings": "Igenamiterere",
+    "search": "Shakisha",
+    "cancel": "Kuraho",
+    "save": "Bika",
+    "edit": "Hindura",
+    "delete": "Siba",
+    "view": "Reba",
+    "back": "Subira",
+    "next": "Ibikurikira",
+    "loading": "Birimo...",
+    "error": "Ikosa",
+    "success": "Byagenze neza",
+    "getStarted": "Tangira",
+    "learnMore": "Menya Birenzeho",
+    "joinYourGroup": "Jya mu Kimina cyawe",
+    "filter": "Tondeka",
+    "export": "Hatanga",
+    "download": "Shyiramo",
+    "approve": "Emeza",
+    "reject": "Wanga",
+    "submit": "Tanga",
+    "close": "Funga",
+    "confirm": "Emeza",
+    "yes": "Yego",
+    "no": "Oya"
+  },
+  "dashboard": {
+    "welcomeBack": "Murakaza neza",
+    "totalSavings": "Ubwiyunge Bwose",
+    "loans": "Inguzanyo",
+    "creditScore": "Icyemezo cy'ubwoba",
+    "quickActions": "Ibyo Ukora Vuba",
+    "recentTransactions": "Ibicuruzwa Bya Vuba",
+    "transactionHistory": "Amakuru y'ibicuruzwa",
+    "viewAll": "Reba Byose",
+    "mySavings": "Ubwiyunge Bwanjye",
+    "myLoans": "Inguzanyo Zanjye",
+    "transactions": "Ibicuruzwa",
+    "fines": "Amande",
+    "learnGrow": "Kwigisha no Gukura",
+    "voting": "Gutora mu Kimina",
+    "myGroup": "Ikimina Cyanje",
+    "groupChat": "Ibiganiro by'Ikimina",
+    "support": "Ifashanyobora",
+    "chat": "Ibiganiro",
+    "noTransactions": "Ntago habonekamo ibicuruzwa",
+    "all": "Byose",
+    "pending": "Birindiriye",
+    "completed": "Byarangiye",
+    "active": "Bikora",
+    "inactive": "Ntibikora"
+  },
+  "landing": {
+    "heroTitle": "Twubake ejo hazaza h'abizigamira",
+    "heroSubtitle": "Twubake ejo hazaza h'abizigamira",
+    "heroDescription": "Hujana Ibimina by'ubwiyunge by'u Rwanda na banki binyuze muri sisitemu y'idijitari yuzuye, y'ubwenge, kandi iroroshye yo gukoresha.",
+    "featuresTitle": "Imikoreshereze Ikomeye",
+    "featuresSubtitle": "Ibintu byose ukeneye gukoresha gukangura ikimina cyawe mu buryo bwa dijitari",
+    "ctaTitle": "Witeguye Guhindura Ikimina cyawe?",
+    "ctaDescription": "Jya mu makumi y'ibihumbi by'Ibimina bikoresha UMURENGE WALLET",
+    "emailPlaceholder": "Shyiramo imeyili yawe",
+    "footerCopyright": "© 2024 UMURENGE WALLET. Uburenganzira bwose burabungwa."
+  },
+  "navigation": {
+    "about": "Ibyerekeye",
+    "features": "Imikoreshereze",
+    "contact": "Tuvugane",
+    "help": "Ifashanyobora"
+  },
+  "features": {
+    "mobileMoney": {
+      "title": "Guhuza na Mobile Money",
+      "desc": "Guhuza neza na MTN na Airtel"
+    },
+    "aiCredit": {
+      "title": "AI yo Gupima Ubwoba",
+      "desc": "Ibyemezo by'ubwenge by'inguzanyo bitewe n'amateka yawe"
+    },
+    "secure": {
+      "title": "Umutekano n'Ubwoba",
+      "desc": "Umutekano wuzuye n'ubwoba bwuzuye"
+    },
+    "groupManagement": {
+      "title": "Gucunga Ibimina",
+      "desc": "Ibimina by'ubwiyunge byahujwe"
+    },
+    "analytics": {
+      "title": "Ubushakashatsi Bw'Ubwenge",
+      "desc": "Ubushakashatsi bw'ubwenge bw'AI n'amaporoto"
+    },
+    "chat": {
+      "title": "Ibiganiro by'Igihe Gikora",
+      "desc": "Ibiganiro byihuse mu bimina"
+    }
+  },
+  "stats": {
+    "activeGroups": "Ibimina Bikora",
+    "members": "Abanyamuryango",
+    "savings": "Ubwiyunge",
+    "loansDisbursed": "Inguzanyo Zahagurijwe"
+  },
+  "member": {
+    "dashboard": "Ikiganiro cy'Umuyoboka",
+    "savings": "Ubwiyunge Bwanjye",
+    "loans": "Inguzanyo Zanjye",
+    "transactions": "Ibicuruzwa",
+    "fines": "Amande",
+    "learnGrow": "Kwigisha no Gukura",
+    "voting": "Gutora mu Kimina",
+    "myGroup": "Ikimina Cyanje",
+    "support": "Ifashanyobora",
+    "requestLoan": "Saba Inguzanyo",
+    "makeContribution": "Tanga Intahe",
+    "viewDetails": "Reba Ibintu Byose",
+    "amount": "Umubare",
+    "date": "Itariki",
+    "status": "Imimerere",
+    "type": "Ubwoko",
+    "purpose": "Intego",
+    "duration": "Igihe",
+    "monthlyPayment": "Kwishyura Ukwezi",
+    "remaining": "Usigaye"
+  },
+  "groupAdmin": {
+    "dashboard": "Gucunga Ikimina",
+    "manageMembers": "Cunga Abanyamuryango",
+    "loanRequests": "Gusaba Inguzanyo",
+    "contributions": "Intahe",
+    "fines": "Amande",
+    "meetings": "Inama",
+    "voting": "Gutora mu Kimina",
+    "analytics": "Ubushakashatsi",
+    "announcements": "Amatangazo",
+    "applications": "Gusaba",
+    "agentSupport": "Ifashanyobora y'Umugenzuzi",
+    "totalMembers": "Abanyamuryango Bose",
+    "activeLoans": "Inguzanyo Zikora",
+    "pendingApprovals": "Ibyemezo Birindiriye",
+    "groupSavings": "Ubwiyunge bw'Ikimina",
+    "recentActivities": "Ibyakozwe Vuba",
+    "addMember": "Ongeramo Umuyoboka Mushya",
+    "viewAllMembers": "Reba Abanyamuryango Bose",
+    "viewAllLoans": "Reba Gusaba Inguzanyo Byose",
+    "createAnnouncement": "Kora Amatangazo Mashya",
+    "scheduleMeeting": "Gahunda Inama",
+    "createVote": "Kora Amahitamo Mashya"
+  }
+}
+
