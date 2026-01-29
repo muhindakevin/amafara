@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { Calendar, Clock, Users, DollarSign, CheckCircle, AlertCircle, Plus, Edit, Trash2 } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 
 function CashierSchedule() {
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
+  const { t: tCashier } = useTranslation('cashier')
   const [showCreateSchedule, setShowCreateSchedule] = useState(false)
   const [selectedDate, setSelectedDate] = useState('')
 
@@ -65,7 +69,7 @@ function CashierSchedule() {
 
   const handleCreateSchedule = () => {
     console.log('Creating schedule:', newSchedule)
-    alert('Schedule created successfully!')
+    alert(t('scheduleCreatedSuccessfully', { defaultValue: 'Schedule created successfully!' }))
     setShowCreateSchedule(false)
     setNewSchedule({
       memberId: '',
@@ -79,17 +83,17 @@ function CashierSchedule() {
 
   const handleSendReminder = (scheduleId) => {
     console.log('Sending reminder for schedule:', scheduleId)
-    alert('Reminder sent successfully!')
+    alert(t('reminderSentSuccessfully', { defaultValue: 'Reminder sent successfully!' }))
   }
 
   const handleEditSchedule = (scheduleId) => {
     console.log('Editing schedule:', scheduleId)
-    alert('Edit schedule dialog would open here')
+    alert(t('editSchedulePlaceholder', { defaultValue: 'Edit schedule dialog would open here' }))
   }
 
   const handleDeleteSchedule = (scheduleId) => {
     console.log('Deleting schedule:', scheduleId)
-    alert('Schedule deleted successfully!')
+    alert(t('scheduleDeletedSuccessfully', { defaultValue: 'Schedule deleted successfully!' }))
   }
 
   return (
@@ -98,18 +102,18 @@ function CashierSchedule() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Contribution Schedule</h1>
-            <p className="text-gray-600 mt-1">Manage scheduled member contributions</p>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{tCashier('contributionSchedule', { defaultValue: 'Contribution Schedule' })}</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">{tCashier('manageScheduledContributions', { defaultValue: 'Manage scheduled member contributions' })}</p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setShowCreateSchedule(true)}
               className="btn-primary flex items-center gap-2"
             >
-              <Plus size={18} /> Schedule Contribution
+              <Plus size={18} /> {tCashier('scheduleContribution', { defaultValue: 'Schedule Contribution' })}
             </button>
             <button className="btn-secondary flex items-center gap-2">
-              <Calendar size={18} /> Calendar View
+              <Calendar size={18} /> {t('calendarView', { defaultValue: 'Calendar View' })}
             </button>
           </div>
         </div>
@@ -119,7 +123,7 @@ function CashierSchedule() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Scheduled Today</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tCashier('scheduledToday', { defaultValue: 'Scheduled Today' })}</p>
                 <p className="text-2xl font-bold text-gray-800">
                   {scheduledContributions.filter(s => s.date === '2024-01-25').length}
                 </p>
@@ -131,7 +135,7 @@ function CashierSchedule() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Scheduled</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tCashier('totalScheduled', { defaultValue: 'Total Scheduled' })}</p>
                 <p className="text-2xl font-bold text-gray-800">
                   {scheduledContributions.length}
                 </p>
@@ -143,7 +147,7 @@ function CashierSchedule() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Completed</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('completed', { defaultValue: 'Completed' })}</p>
                 <p className="text-2xl font-bold text-green-600">
                   {scheduledContributions.filter(s => s.status === 'completed').length}
                 </p>

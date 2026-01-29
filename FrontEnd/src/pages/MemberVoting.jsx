@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Vote, CheckCircle, XCircle, Clock, Users, FileText, Calendar, AlertCircle, History } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function MemberVoting() {
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
   const [activeTab, setActiveTab] = useState('active')
   const [activeVotes, setActiveVotes] = useState([])
   const [voteHistory, setVoteHistory] = useState([])
@@ -11,8 +14,19 @@ function MemberVoting() {
   const [totalMembers, setTotalMembers] = useState(0)
   const [myVotes, setMyVotes] = useState(0)
 
-  // Relevant vote types for members (withdrawal approvals, contribution/fine changes)
-  const relevantVoteTypes = ['withdrawal_approval', 'contribution_change', 'fine_change']
+  // Relevant vote types for members (all voting types)
+  const relevantVoteTypes = [
+    'withdrawal_approval', 
+    'contribution_change', 
+    'fine_change',
+    'loan_approval_override',
+    'saving_amount_change',
+    'fine_amount_change',
+    'interest_rate_change',
+    'loan_approval',
+    'member_admission',
+    'policy_change'
+  ]
 
   useEffect(() => {
     loadVotes()
@@ -131,7 +145,7 @@ function MemberVoting() {
       // Find the vote to get its options
       const vote = activeVotes.find(v => v.id === voteId)
       if (!vote || !vote.options) {
-        alert('Vote options not found')
+        alert(t('voteOptionsNotFound', { defaultValue: 'Vote options not found' }))
         return
       }
       
@@ -143,7 +157,7 @@ function MemberVoting() {
       )
       
       if (!option) {
-        alert('Vote option not found')
+        alert(t('voteOptionNotFound', { defaultValue: 'Vote option not found' }))
         return
       }
       
@@ -152,11 +166,11 @@ function MemberVoting() {
       })
       
       if (response.data?.success) {
-        alert('Your vote has been recorded successfully!')
+        alert(t('voteRecordedSuccessfully', { defaultValue: 'Your vote has been recorded successfully!' }))
         await loadVotes() // Refresh votes
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Failed to cast vote'
+      const errorMessage = error.response?.data?.message || t('failedToCastVote', { defaultValue: 'Failed to cast vote' })
       alert(errorMessage)
     }
   }
@@ -166,6 +180,10 @@ function MemberVoting() {
       case 'withdrawal_approval': return 'bg-blue-100 text-blue-700'
       case 'contribution_change': return 'bg-green-100 text-green-700'
       case 'fine_change': return 'bg-orange-100 text-orange-700'
+      case 'loan_approval_override': return 'bg-red-100 text-red-700'
+      case 'saving_amount_change': return 'bg-teal-100 text-teal-700'
+      case 'fine_amount_change': return 'bg-yellow-100 text-yellow-700'
+      case 'interest_rate_change': return 'bg-pink-100 text-pink-700'
       case 'member_admission': return 'bg-purple-100 text-purple-700'
       case 'loan_approval': return 'bg-indigo-100 text-indigo-700'
       case 'policy_change': return 'bg-gray-100 text-gray-700'
@@ -191,8 +209,8 @@ function MemberVoting() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Group Voting</h1>
-          <p className="text-gray-600 mt-1">Participate in group decisions and governance</p>
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('groupVoting', { defaultValue: 'Group Voting' })}</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">{t('participateInDecisions', { defaultValue: 'Participate in group decisions and governance' })}</p>
         </div>
 
         {/* Stats */}
@@ -200,8 +218,8 @@ function MemberVoting() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Active Votes</p>
-                <p className="text-2xl font-bold text-gray-800">{activeVotes.length}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('activeVotes')}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{activeVotes.length}</p>
               </div>
               <Clock className="text-yellow-600" size={32} />
             </div>
@@ -209,8 +227,8 @@ function MemberVoting() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">My Votes</p>
-                <p className="text-2xl font-bold text-gray-800">{myVotes}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('myVotes', { defaultValue: 'My Votes' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{myVotes}</p>
               </div>
               <Vote className="text-blue-600" size={32} />
             </div>
@@ -218,8 +236,8 @@ function MemberVoting() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Members</p>
-                <p className="text-2xl font-bold text-gray-800">{totalMembers || 0}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalMembers')}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{totalMembers || 0}</p>
               </div>
               <Users className="text-green-600" size={32} />
             </div>
@@ -249,8 +267,8 @@ function MemberVoting() {
           <div className="p-6">
             {activeTab === 'active' && (
               <div className="space-y-6">
-                <h2 className="text-xl font-bold text-gray-800">Active Votes</h2>
-                <p className="text-gray-600">These proposals need your vote</p>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">{t('activeVotes')}</h2>
+                <p className="text-gray-600 dark:text-gray-400">{t('proposalsNeedVote', { defaultValue: 'These proposals need your vote' })}</p>
 
                 {activeVotes.map((vote) => (
                   <div key={vote.id} className="card">
@@ -348,9 +366,11 @@ function MemberVoting() {
                       Votes will appear here when the Group Admin creates proposals for:
                     </p>
                     <ul className="text-sm text-gray-600 mt-4 max-w-md mx-auto text-left list-disc list-inside">
-                      <li>Large bank account withdrawals</li>
-                      <li>Changes to contribution amounts</li>
+                      <li>Loan requests exceeding savings or AI credit limits</li>
+                      <li>Changes to saving/contribution amounts</li>
                       <li>Changes to fine amounts</li>
+                      <li>Changes to loan interest rates</li>
+                      <li>Large bank account withdrawals</li>
                     </ul>
                   </div>
                 ) : null}

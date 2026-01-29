@@ -2,7 +2,7 @@ const { User, MemberApplication, Group, Notification } = require('../models');
 const bcrypt = require('bcryptjs');
 const { Op } = require('sequelize');
 const { sendRegistrationConfirmation, sendSMS } = require('../notifications/smsService');
-const { sendApprovalEmail, sendEmail } = require('../notifications/emailService');
+const { sendApprovalEmail, sendWelcomeEmail, sendEmail } = require('../notifications/emailService');
 
 // Helper function to normalize phone number
 function normalizePhone(phone) {
@@ -67,6 +67,13 @@ const createMemberApplication = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User with this phone or email already exists' });
     }
 
+    // Validate password using system settings
+    const { validatePassword } = require('../utils/passwordValidator');
+    const passwordValidation = await validatePassword(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ success: false, message: passwordValidation.message });
+    }
+
     // Hash password
     const hashed = await bcrypt.hash(password, 10);
     
@@ -99,44 +106,51 @@ const createMemberApplication = async (req, res) => {
       status: 'pending' 
     });
 
-    // Find Group Admin(s) for the group and send notifications
-    try {
-      const groupAdmins = await User.findAll({
-        where: {
-          groupId: groupId,
-          role: 'Group Admin',
-          status: 'active'
-        }
-      });
+    // Send response immediately to avoid timeout
+    res.status(201).json({ 
+      success: true, 
+      message: 'Application submitted successfully. You will receive an email once your application is reviewed. Once approved, you will receive a welcome email and can log in to your account.', 
+      data: { applicationId: app.id, userId: user.id } 
+    });
 
-      const notificationMessage = `New member application: ${user.name} has applied to join ${group.name}. Please review and approve/reject the application.`;
-
-      // Send notifications to all Group Admins
-      for (const admin of groupAdmins) {
-        // Create in-app notification
-        await Notification.create({
-          userId: admin.id,
-          type: 'registration',
-          channel: 'in_app',
-          title: 'New Member Application',
-          content: notificationMessage,
-          status: 'sent'
+    // Send notifications asynchronously (non-blocking)
+    setImmediate(async () => {
+      try {
+        const groupAdmins = await User.findAll({
+          where: {
+            groupId: groupId,
+            role: 'Group Admin',
+            status: 'active'
+          }
         });
 
-        // Send SMS if phone is available
-        try {
-          if (admin.phone) {
-            const smsMessage = `New member application: ${user.name} (${user.phone}) applied to join ${group.name}. Application ID: ${app.id}. Please review in your dashboard.`;
-            await sendSMS(admin.phone, smsMessage, admin.id, 'registration');
-          }
-        } catch (smsError) {
-          console.error(`Failed to send SMS to Group Admin ${admin.name}:`, smsError);
-        }
+        const notificationMessage = `New member application: ${user.name} has applied to join ${group.name}. Please review and approve/reject the application.`;
 
-        // Send email if available
-        try {
+        // Send notifications to all Group Admins
+        for (const admin of groupAdmins) {
+          // Create in-app notification
+          try {
+            await Notification.create({
+              userId: admin.id,
+              type: 'registration',
+              channel: 'in_app',
+              title: 'New Member Application',
+              content: notificationMessage,
+              status: 'sent'
+            });
+          } catch (notifError) {
+            console.error(`Failed to create notification for admin ${admin.name}:`, notifError);
+          }
+
+          // Send SMS if phone is available (non-blocking)
+          if (admin.phone) {
+            sendSMS(admin.phone, `New member application: ${user.name} (${user.phone}) applied to join ${group.name}. Application ID: ${app.id}. Please review in your dashboard.`, admin.id, 'registration')
+              .catch(smsError => console.error(`Failed to send SMS to Group Admin ${admin.name}:`, smsError));
+          }
+
+          // Send email if available (non-blocking)
           if (admin.email) {
-            await sendEmail(
+            sendEmail(
               admin.email,
               'New Member Application - Requires Review',
               `<p>Dear ${admin.name},</p>
@@ -154,21 +168,12 @@ const createMemberApplication = async (req, res) => {
               <p>Please review and approve or reject this application in your dashboard.</p>`,
               admin.id,
               'registration'
-            );
+            ).catch(emailError => console.error(`Failed to send email to Group Admin ${admin.name}:`, emailError));
           }
-        } catch (emailError) {
-          console.error(`Failed to send email to Group Admin ${admin.name}:`, emailError);
         }
+      } catch (notifError) {
+        console.error('Error sending notifications to Group Admin:', notifError);
       }
-    } catch (notifError) {
-      console.error('Error sending notifications to Group Admin:', notifError);
-      // Don't fail the application submission if notifications fail
-    }
-
-    res.status(201).json({ 
-      success: true, 
-      message: 'Application submitted successfully. Group Admin has been notified.', 
-      data: { applicationId: app.id, userId: user.id } 
     });
   } catch (error) {
     console.error('Create member application error:', error);
@@ -244,13 +249,24 @@ const approveMemberApplication = async (req, res) => {
     app.reviewedBy = req.user.id;
     app.reviewDate = new Date();
     await app.save();
+    
     // Notify via SMS and Email
     try {
-      if (user.phone) await sendRegistrationConfirmation(user.phone, user.name || 'Member')
-      if (user.email) await sendApprovalEmail(user.email, user.name || 'Member')
-    } catch (_) {}
+      if (user.phone) {
+        await sendRegistrationConfirmation(user.phone, user.name || 'Member')
+      }
+      if (user.email) {
+        // Send approval email
+        await sendApprovalEmail(user.email, user.name || 'Member')
+        // Also send welcome email
+        await sendWelcomeEmail(user.email, user.name || 'Member')
+      }
+    } catch (notifError) {
+      console.error('[approveMemberApplication] Notification error:', notifError)
+      // Don't fail the approval if notifications fail
+    }
 
-    return res.json({ success: true, message: 'Application approved', data: { application: app, user } });
+    return res.json({ success: true, message: 'Application approved successfully. User has been notified via email.', data: { application: app, user } });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to approve application', error: error.message });
   }
@@ -266,12 +282,40 @@ const rejectMemberApplication = async (req, res) => {
     const { reason } = req.body;
     const app = await MemberApplication.findByPk(id);
     if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
+    
+    const user = await User.findByPk(app.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    
     app.status = 'rejected';
     app.reviewedBy = req.user.id;
     app.reviewDate = new Date();
     app.rejectionReason = reason || null;
     await app.save();
-    return res.json({ success: true, message: 'Application rejected', data: app });
+    
+    // Send rejection email to user
+    try {
+      if (user.email) {
+        await sendEmail(
+          user.email,
+          'Application Rejected - IKIMINA WALLET',
+          `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #dc2626;">Application Rejected</h1>
+            <p>Dear ${user.name || 'Member'},</p>
+            <p>We regret to inform you that your application to join the group has been rejected.</p>
+            ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+            <p>If you have any questions, please contact your Group Admin.</p>
+            <p>Best regards,<br>IKIMINA WALLET Team</p>
+          </div>`,
+          user.id,
+          'rejection'
+        );
+      }
+    } catch (emailError) {
+      console.error('[rejectMemberApplication] Error sending rejection email:', emailError);
+      // Don't fail the rejection if email fails
+    }
+    
+    return res.json({ success: true, message: 'Application rejected. User has been notified via email.', data: app });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to reject application', error: error.message });
   }

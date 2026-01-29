@@ -21,6 +21,12 @@ const AuditLog = require('./AuditLog')(sequelize, Sequelize);
 const SupportTicket = require('./SupportTicket')(sequelize, Sequelize);
 const Setting = require('./Setting')(sequelize, Sequelize);
 const LoanProduct = require('./LoanProduct')(sequelize, Sequelize);
+const MessageTemplate = require('./MessageTemplate')(sequelize, Sequelize);
+const ComplianceRule = require('./ComplianceRule')(sequelize, Sequelize);
+const ComplianceViolation = require('./ComplianceViolation')(sequelize, Sequelize);
+const Document = require('./Document')(sequelize, Sequelize);
+const TrainingProgress = require('./TrainingProgress')(sequelize, Sequelize);
+const ScheduledAudit = require('./ScheduledAudit')(sequelize, Sequelize);
 
 // Define relationships
 User.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
@@ -29,14 +35,22 @@ Group.hasMany(User, { foreignKey: 'groupId', as: 'members' });
 User.belongsTo(Branch, { foreignKey: 'branchId', as: 'branch' });
 Branch.hasMany(User, { foreignKey: 'branchId', as: 'users' });
 
+Branch.belongsTo(User, { foreignKey: 'managerId', as: 'manager' });
+User.hasMany(Branch, { foreignKey: 'managerId', as: 'managedBranches' });
+
 Group.belongsTo(Branch, { foreignKey: 'branchId', as: 'branch' });
 Branch.hasMany(Group, { foreignKey: 'branchId', as: 'groups' });
+
+Group.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
+User.hasMany(Group, { foreignKey: 'agentId', as: 'registeredGroups' });
 
 Loan.belongsTo(User, { foreignKey: 'memberId', as: 'member' });
 User.hasMany(Loan, { foreignKey: 'memberId', as: 'loans' });
 
 Loan.belongsTo(User, { foreignKey: 'guarantorId', as: 'guarantor' });
 User.hasMany(Loan, { foreignKey: 'guarantorId', as: 'guaranteedLoans' });
+
+Loan.belongsTo(User, { foreignKey: 'approvedBy', as: 'approver' });
 
 Loan.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 Group.hasMany(Loan, { foreignKey: 'groupId', as: 'loans' });
@@ -64,6 +78,9 @@ Announcement.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
 Meeting.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 Group.hasMany(Meeting, { foreignKey: 'groupId', as: 'meetings' });
 
+Meeting.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
+User.hasMany(Meeting, { foreignKey: 'createdBy', as: 'createdMeetings' });
+
 Vote.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 Group.hasMany(Vote, { foreignKey: 'groupId', as: 'votes' });
 
@@ -84,6 +101,21 @@ User.hasMany(VoteResponse, { foreignKey: 'memberId', as: 'voteResponses' });
 LearnGrowContent.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
 User.hasMany(LearnGrowContent, { foreignKey: 'createdBy', as: 'learnGrowContent' });
 
+TrainingProgress.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasMany(TrainingProgress, { foreignKey: 'userId', as: 'trainingProgress' });
+
+TrainingProgress.belongsTo(LearnGrowContent, { foreignKey: 'contentId', as: 'content' });
+LearnGrowContent.hasMany(TrainingProgress, { foreignKey: 'contentId', as: 'progress' });
+
+ScheduledAudit.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(ScheduledAudit, { foreignKey: 'groupId', as: 'scheduledAudits' });
+
+ScheduledAudit.belongsTo(User, { foreignKey: 'scheduledBy', as: 'scheduler' });
+User.hasMany(ScheduledAudit, { foreignKey: 'scheduledBy', as: 'scheduledAudits' });
+
+ScheduledAudit.belongsTo(User, { foreignKey: 'completedBy', as: 'completer' });
+User.hasMany(ScheduledAudit, { foreignKey: 'completedBy', as: 'completedAudits' });
+
 ChatMessage.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
 ChatMessage.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
 User.hasMany(ChatMessage, { foreignKey: 'senderId', as: 'messages' });
@@ -99,12 +131,38 @@ MemberApplication.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 Group.hasMany(MemberApplication, { foreignKey: 'groupId', as: 'applications' });
 
 MemberApplication.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+MemberApplication.belongsTo(User, { foreignKey: 'reviewedBy', as: 'reviewer' });
 
 AuditLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(AuditLog, { foreignKey: 'userId', as: 'auditLogs' });
 
 SupportTicket.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+SupportTicket.belongsTo(User, { foreignKey: 'assignedTo', as: 'assignedAgent' });
 User.hasMany(SupportTicket, { foreignKey: 'userId', as: 'supportTickets' });
+
+ComplianceRule.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(ComplianceRule, { foreignKey: 'groupId', as: 'complianceRules' });
+
+ComplianceRule.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
+ComplianceRule.belongsTo(User, { foreignKey: 'updatedBy', as: 'updater' });
+
+ComplianceViolation.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(ComplianceViolation, { foreignKey: 'groupId', as: 'violations' });
+
+ComplianceViolation.belongsTo(ComplianceRule, { foreignKey: 'ruleId', as: 'rule' });
+ComplianceRule.hasMany(ComplianceViolation, { foreignKey: 'ruleId', as: 'violations' });
+
+ComplianceViolation.belongsTo(User, { foreignKey: 'memberId', as: 'member' });
+User.hasMany(ComplianceViolation, { foreignKey: 'memberId', as: 'violations' });
+
+ComplianceViolation.belongsTo(User, { foreignKey: 'reportedBy', as: 'reporter' });
+ComplianceViolation.belongsTo(User, { foreignKey: 'resolvedBy', as: 'resolver' });
+
+Document.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
+Group.hasMany(Document, { foreignKey: 'groupId', as: 'documents' });
+
+Document.belongsTo(User, { foreignKey: 'uploadedBy', as: 'uploader' });
+User.hasMany(Document, { foreignKey: 'uploadedBy', as: 'uploadedDocuments' });
 
 module.exports = {
   sequelize,
@@ -128,6 +186,12 @@ module.exports = {
   AuditLog,
   SupportTicket,
   Setting,
-  LoanProduct
+  LoanProduct,
+  MessageTemplate,
+  ComplianceRule,
+  ComplianceViolation,
+  Document,
+  TrainingProgress,
+  ScheduledAudit
 };
 

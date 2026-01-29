@@ -1,22 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Paperclip, Smile, Phone, Video, MoreVertical, Search, Filter, X } from 'lucide-react'
-import { getTranslation } from '../utils/translations'
-import { useLanguage } from '../contexts/LanguageContext'
+import { useSearchParams } from 'react-router-dom'
+import { Send, Paperclip, Smile, MoreVertical, Search, Filter, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import api, { getAuthToken } from '../utils/api'
 import { io } from 'socket.io-client'
 
-// Dynamic import for simple-peer to avoid build issues
-let Peer = null
-const loadPeer = async () => {
-  if (!Peer) {
-    const simplePeer = await import('simple-peer')
-    Peer = simplePeer.default || simplePeer
-  }
-  return Peer
-}
-
 function ChatInterface() {
-  const { language } = useLanguage()
+  const [searchParams] = useSearchParams()
+  const { t } = useTranslation('common')
   const [message, setMessage] = useState('')
   const [selectedChat, setSelectedChat] = useState(null)
   const [chats, setChats] = useState([])
@@ -27,20 +18,7 @@ function ChatInterface() {
   const [currentUserId, setCurrentUserId] = useState(null)
   const [currentGroupId, setCurrentGroupId] = useState(null)
   
-  // WebRTC state
-  const [call, setCall] = useState(null)
-  const [callAccepted, setCallAccepted] = useState(false)
-  const [stream, setStream] = useState(null)
-  const [receivingCall, setReceivingCall] = useState(false)
-  const [caller, setCaller] = useState(null)
-  const [callerSignal, setCallerSignal] = useState(null)
-  const [callType, setCallType] = useState(null) // 'voice' or 'video'
-  const [isCallActive, setIsCallActive] = useState(false)
-  
   const messagesEndRef = useRef(null)
-  const myVideo = useRef(null)
-  const userVideo = useRef(null)
-  const connectionRef = useRef(null)
   const audioRef = useRef(null)
   const selectedChatRef = useRef(null)
 
@@ -176,31 +154,6 @@ function ChatInterface() {
         playNotificationSound()
       })
 
-      // WebRTC call handlers
-      newSocket.on('incoming_call', (data) => {
-        setReceivingCall(true)
-        setCaller(data.from)
-        setCallerSignal(data.signal)
-        setCallType(data.callType)
-        playNotificationSound()
-      })
-
-      newSocket.on('call_accepted', (data) => {
-        setCallAccepted(true)
-        if (connectionRef.current) {
-          connectionRef.current.signal(data.signal)
-        }
-      })
-
-      newSocket.on('call_ended', () => {
-        endCall()
-      })
-
-      newSocket.on('call_failed', (data) => {
-        alert(data.message || 'Call failed')
-        endCall()
-      })
-
       return () => {
         if (newSocket) {
           newSocket.close()
@@ -226,6 +179,7 @@ function ChatInterface() {
         }
 
         // Get chat list (includes group chat and all leaders)
+        // Backend already filters by groupId for Secretary role
         const chatListResponse = await api.get('/chat/list')
         if (chatListResponse.data?.success) {
           const chatList = chatListResponse.data.data
@@ -235,6 +189,12 @@ function ChatInterface() {
           const urlParams = new URLSearchParams(window.location.search)
           const groupIdParam = urlParams.get('groupId')
           const userIdParam = urlParams.get('userId')
+          const messageParam = urlParams.get('message')
+          
+          // Prefill message if provided in URL
+          if (messageParam) {
+            setMessage(decodeURIComponent(messageParam))
+          }
           
           if (userIdParam) {
             // Select specific leader chat
@@ -445,150 +405,11 @@ function ChatInterface() {
     }
   }
 
-  // WebRTC functions
-  const callUser = async (userId, type = 'voice') => {
-    try {
-      if (!socket || !socket.connected) {
-        alert('Please wait for connection to be established')
-        return
-      }
-      
-      const PeerClass = await loadPeer()
-      if (!PeerClass) {
-        alert('Call feature is not available. Please refresh the page.')
-        return
-      }
-      
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video',
-        audio: true
-      })
-      
-      setStream(stream)
-      setCallType(type)
-      setIsCallActive(true)
-      
-      if (myVideo.current) {
-        myVideo.current.srcObject = stream
-      }
-
-      const peer = new PeerClass({
-        initiator: true,
-        trickle: false,
-        stream: stream
-      })
-
-      peer.on('signal', (data) => {
-        if (socket) {
-          socket.emit('call_user', {
-            userToCall: userId,
-            signalData: data,
-            from: currentUserId,
-            name: 'You',
-            callType: type
-          })
-        }
-      })
-
-      peer.on('stream', (stream) => {
-        if (userVideo.current) {
-          userVideo.current.srcObject = stream
-        }
-      })
-
-      connectionRef.current = peer
-    } catch (error) {
-      console.error('[Chat] Error starting call:', error)
-      alert('Failed to start call. Please check your camera/microphone permissions.')
-    }
-  }
-
-  const answerCall = async () => {
-    setCallAccepted(true)
-    
-    try {
-      if (!socket || !socket.connected) {
-        alert('Please wait for connection to be established')
-        return
-      }
-      
-      const PeerClass = await loadPeer()
-      if (!PeerClass) {
-        alert('Call feature is not available. Please refresh the page.')
-        return
-      }
-      
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: callType === 'video',
-        audio: true
-      })
-      
-      setStream(stream)
-      setIsCallActive(true)
-      
-      if (myVideo.current) {
-        myVideo.current.srcObject = stream
-      }
-
-      const peer = new PeerClass({
-        initiator: false,
-        trickle: false,
-        stream: stream
-      })
-
-      peer.on('signal', (data) => {
-        if (socket) {
-          socket.emit('accept_call', {
-            signal: data,
-            to: caller
-          })
-        }
-      })
-
-      peer.on('stream', (stream) => {
-        if (userVideo.current) {
-          userVideo.current.srcObject = stream
-        }
-      })
-
-      if (callerSignal) {
-        peer.signal(callerSignal)
-      }
-
-      connectionRef.current = peer
-      setReceivingCall(false)
-    } catch (error) {
-      console.error('[Chat] Error answering call:', error)
-      alert('Failed to answer call. Please check your camera/microphone permissions.')
-    }
-  }
-
-  const endCall = () => {
-    setIsCallActive(false)
-    setCallAccepted(false)
-    setReceivingCall(false)
-    setCaller(null)
-    setCallerSignal(null)
-    
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop())
-      setStream(null)
-    }
-    
-    if (connectionRef.current) {
-      connectionRef.current.destroy()
-      connectionRef.current = null
-    }
-    
-    if (socket && selectedChat?.receiverId) {
-      socket.emit('end_call', { to: selectedChat.receiverId })
-    }
-  }
 
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-gray-500">Loading chats...</div>
+        <div className="text-gray-500 dark:text-gray-400">{t('loading', { defaultValue: 'Loading chats...' })}</div>
       </div>
     )
   }
@@ -596,138 +417,93 @@ function ChatInterface() {
   const selectedChatData = chats.find(c => c.id === selectedChat?.id) || selectedChat
 
   return (
-    <div className="h-full flex relative">
+    <div className="h-full flex flex-col md:flex-row relative">
       {/* Notification sound (hidden audio element) */}
       <audio ref={audioRef} preload="auto">
         <source src="/notification.mp3" type="audio/mpeg" />
       </audio>
 
-      {/* Incoming call modal */}
-      {receivingCall && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold mb-2">Incoming {callType === 'video' ? 'Video' : 'Voice'} Call</h3>
-            <p className="text-gray-600 mb-4">From: {caller}</p>
-            <div className="flex gap-3">
-              <button
-                onClick={answerCall}
-                className="flex-1 bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600"
-              >
-                Answer
-              </button>
-              <button
-                onClick={() => {
-                  setReceivingCall(false)
-                  setCaller(null)
-                  setCallerSignal(null)
-                }}
-                className="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600"
-              >
-                Decline
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Active call UI */}
-      {isCallActive && (
-        <div className="absolute inset-0 bg-black z-50 flex">
-          <div className="flex-1 relative">
-            {callType === 'video' && (
-              <>
-                <video
-                  ref={userVideo}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-                <video
-                  ref={myVideo}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="absolute bottom-4 right-4 w-48 h-36 object-cover rounded-lg border-2 border-white"
-                />
-              </>
-            )}
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4">
-              <button
-                onClick={endCall}
-                className="bg-red-500 text-white p-4 rounded-full hover:bg-red-600"
-              >
-                <Phone size={24} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Chat List */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-800">{getTranslation('chat', language)}</h2>
-          <div className="flex gap-2 mt-3">
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <Search size={18} />
+      <div className={`${selectedChatData ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full`}>
+        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">{t('chat')}</h2>
+            {selectedChatData && (
+              <button
+                onClick={() => setSelectedChat(null)}
+                className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <X size={18} className="text-gray-600 dark:text-gray-300" />
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+              <Search size={16} className="text-gray-600 dark:text-gray-300 sm:w-[18px] sm:h-[18px]" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <Filter size={18} />
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+              <Filter size={16} className="text-gray-600 dark:text-gray-300 sm:w-[18px] sm:h-[18px]" />
             </button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {chats.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">
-              No chats available
+            <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+              {t('noChatsAvailable', { defaultValue: 'No chats available' })}
             </div>
           ) : (
             chats.map((chat) => (
               <div
                 key={chat.id}
-                className={`w-full border-b border-gray-100 ${
-                  selectedChat?.id === chat.id ? 'bg-primary-50 border-primary-200' : ''
+                className={`w-full border-b border-gray-100 dark:border-gray-700 ${
+                  selectedChat?.id === chat.id ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-700' : ''
                 }`}
               >
             <button
-                  onClick={() => setSelectedChat(chat)}
-                  className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setSelectedChat(chat)
+                    // On mobile, hide chat list after selection
+                    if (window.innerWidth < 768) {
+                      // Chat list will be hidden via CSS
+                    }
+                  }}
+                  className="w-full p-3 sm:p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
             >
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+              <div className="flex items-start gap-2 sm:gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
                   {chat.name[0]}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-gray-800 truncate">{chat.name}</h3>
+                  <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+                    <h3 className="font-semibold text-gray-800 dark:text-white truncate text-sm sm:text-base">{chat.name}</h3>
                           {chat.type === 'group' && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Group</span>
+                            <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 sm:px-2 py-0.5 rounded flex-shrink-0">Group</span>
                           )}
                           {chat.role && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">{chat.role}</span>
+                            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 sm:px-2 py-0.5 rounded flex-shrink-0">{chat.role}</span>
                           )}
                         </div>
                         {chat.lastMessage && (
-                          <span className="text-xs text-gray-500">{formatTime(chat.lastMessage.time)}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{formatTime(chat.lastMessage.time)}</span>
                         )}
                   </div>
                       {chat.lastMessage ? (
-                        <p className="text-sm text-gray-600 truncate mt-1">
+                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate mt-1">
                           {chat.lastMessage.sender}: {chat.lastMessage.text}
                         </p>
                       ) : (
-                        <p className="text-sm text-gray-400 italic mt-1">
-                          {chat.type === 'group' ? 'No messages yet' : 'Start a conversation'}
+                        <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 italic mt-1">
+                          {chat.type === 'group' ? t('noMessagesYet', { defaultValue: 'No messages yet' }) : t('startConversation', { defaultValue: 'Start a conversation' })}
                         </p>
                       )}
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-gray-500">
-                          {chat.type === 'group' ? `${chat.members} members` : 'Direct message'}
+                      <div className="flex items-center justify-between mt-2 gap-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {chat.type === 'group' ? `${chat.members} ${t('members', { defaultValue: 'members' })}` : t('directMessage', { defaultValue: 'Direct message' })}
                         </span>
                   {chat.unread > 0 && (
-                      <span className="bg-primary-500 text-white text-xs rounded-full px-2 py-1">
+                      <span className="bg-primary-500 text-white text-xs rounded-full px-2 py-1 flex-shrink-0">
                         {chat.unread}
                       </span>
                         )}
@@ -735,32 +511,6 @@ function ChatInterface() {
                     </div>
                   </div>
                 </button>
-                
-                {/* Call buttons for leaders (private chats only) */}
-                {chat.type === 'private' && chat.receiverId && (
-                  <div className="px-4 pb-3 flex gap-2 justify-end">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        callUser(chat.receiverId, 'voice')
-                      }}
-                      className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                      title="Voice Call"
-                    >
-                      <Phone size={16} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        callUser(chat.receiverId, 'video')
-                      }}
-                      className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                      title="Video Call"
-                    >
-                      <Video size={16} />
-                    </button>
-                    </div>
-                  )}
               </div>
             ))
           )}
@@ -769,50 +519,38 @@ function ChatInterface() {
 
       {/* Chat Area */}
       {selectedChatData ? (
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col w-full md:w-auto">
         {/* Chat Header */}
-        <div className="p-4 border-b border-gray-200 bg-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <button
+                onClick={() => setSelectedChat(null)}
+                className="md:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0"
+              >
+                <X size={18} className="text-gray-600 dark:text-gray-300" />
+              </button>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
                   {selectedChatData.name[0]}
               </div>
-              <div>
-                  <h3 className="font-semibold text-gray-800">{selectedChatData.name}</h3>
-                  <p className="text-sm text-gray-500">{selectedChatData.members} {selectedChatData.members === 1 ? 'member' : 'members'}</p>
+              <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-gray-800 dark:text-white truncate text-sm sm:text-base">{selectedChatData.name}</h3>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{selectedChatData.members} {selectedChatData.members === 1 ? 'member' : 'members'}</p>
               </div>
             </div>
-            <div className="flex gap-2">
-                {selectedChatData.receiverId && (
-                  <>
-                    <button
-                      onClick={() => callUser(selectedChatData.receiverId, 'voice')}
-                      className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                      title="Voice Call"
-                    >
-                <Phone size={18} />
-              </button>
-                    <button
-                      onClick={() => callUser(selectedChatData.receiverId, 'video')}
-                      className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                      title="Video Call"
-                    >
-                <Video size={18} />
-              </button>
-                  </>
-                )}
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <MoreVertical size={18} />
+            <div className="flex gap-2 flex-shrink-0">
+              <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                <MoreVertical size={16} className="text-gray-600 dark:text-gray-300 sm:w-[18px] sm:h-[18px]" />
               </button>
             </div>
           </div>
         </div>
 
         {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4 bg-gray-50 dark:bg-gray-900">
             {messages.length === 0 ? (
-              <div className="text-center text-gray-500 mt-8">
-                No messages yet. Start the conversation!
+              <div className="text-center text-gray-500 dark:text-gray-400 mt-8 text-sm sm:text-base">
+                {t('noMessagesYetStartConversation', { defaultValue: 'No messages yet. Start the conversation!' })}
               </div>
             ) : (
               messages.map((msg) => {
@@ -822,17 +560,17 @@ function ChatInterface() {
               key={msg.id}
                     className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+              <div className={`max-w-[75%] sm:max-w-xs lg:max-w-md px-3 py-2 sm:px-4 sm:py-2 rounded-xl sm:rounded-2xl ${
                       isOwn
                   ? 'bg-primary-500 text-white'
-                        : 'bg-white text-gray-800 border border-gray-200'
+                        : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700'
               }`}>
                       {!isOwn && msg.sender && (
-                        <p className="text-xs font-semibold mb-1">{msg.sender.name}</p>
+                        <p className="text-xs font-semibold mb-1 text-gray-700 dark:text-gray-300">{msg.sender.name}</p>
                 )}
-                <p className="text-sm">{msg.message}</p>
+                <p className="text-sm sm:text-base break-words">{msg.message}</p>
                 <p className={`text-xs mt-1 ${
-                        isOwn ? 'text-blue-100' : 'text-gray-500'
+                        isOwn ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
                 }`}>
                         {formatTime(msg.createdAt)}
                 </p>
@@ -845,40 +583,40 @@ function ChatInterface() {
         </div>
 
         {/* Message Input */}
-        <div className="p-4 border-t border-gray-200 bg-white">
-          <div className="flex items-center gap-3">
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <Paperclip size={18} />
+        <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0">
+              <Paperclip size={16} className="text-gray-600 dark:text-gray-300 sm:w-[18px] sm:h-[18px]" />
             </button>
-            <div className="flex-1 relative">
+            <div className="flex-1 relative min-w-0">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder={getTranslation('chat', language) === 'Chat' ? 'Type a message...' : 'Andika ubutumwa...'}
-                className="w-full px-4 py-3 pr-12 rounded-xl border-2 border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all"
+                placeholder={t('typeMessage', { defaultValue: 'Type a message...' })}
+                className="w-full px-3 py-2 sm:px-4 sm:py-3 pr-10 sm:pr-12 rounded-xl border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-800 outline-none transition-all text-sm sm:text-base"
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                   disabled={sending}
               />
-              <button className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-lg transition-colors">
-                <Smile size={18} />
+              <button className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors">
+                <Smile size={16} className="text-gray-600 dark:text-gray-300 sm:w-[18px] sm:h-[18px]" />
               </button>
             </div>
             <button
               onClick={handleSendMessage}
                 disabled={!message.trim() || sending}
-              className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="p-2.5 sm:p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             >
-              <Send size={18} />
+              <Send size={16} className="sm:w-[18px] sm:h-[18px]" />
             </button>
           </div>
         </div>
       </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
-          <div className="text-center text-gray-500">
-            <p className="text-lg mb-2">Select a chat to start messaging</p>
-            <p className="text-sm">Choose a conversation from the list</p>
+        <div className="hidden md:flex flex-1 items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="text-center text-gray-500 dark:text-gray-400">
+            <p className="text-base sm:text-lg mb-2">{t('selectChatToStart', { defaultValue: 'Select a chat to start messaging' })}</p>
+            <p className="text-sm">{t('chooseConversationFromList', { defaultValue: 'Choose a conversation from the list' })}</p>
           </div>
         </div>
       )}

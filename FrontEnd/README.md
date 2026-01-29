@@ -1,4 +1,4 @@
-# UMURENGE WALLET - Digital Microfinance Platform
+# IKIMINA WALLET - Digital Microfinance Platform
 
 A world-class, intelligent web application for digitizing Rwanda's Ibimina (saving groups) and connecting them to banks through a secure, intelligent, and user-friendly digital microfinance platform.
 
@@ -87,6 +87,27 @@ The production-ready files will be in the `dist` directory.
 - **React Router** - Client-side routing
 - **Lucide Icons** - Beautiful icon library
 - **Recharts** - Charting library for analytics
+- **Google Maps API** - Interactive maps for geographic distribution
+
+## 🗺️ Google Maps Setup
+
+To enable the interactive map feature in Reports & Analytics:
+
+1. **Create a `.env` file** in the `FrontEnd` directory:
+   ```bash
+   VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+   ```
+
+2. **Get your API key**:
+   - Visit: https://console.cloud.google.com/google/maps-apis
+   - Create a project or select existing
+   - Enable "Maps JavaScript API"
+   - Create an API key
+   - Replace `your_google_maps_api_key_here` with your actual key
+
+3. **Restart the development server** after adding the key
+
+For detailed instructions, see [GOOGLE_MAPS_SETUP.md](./GOOGLE_MAPS_SETUP.md)
 
 ## 🎨 Color Palette
 
@@ -119,6 +140,6 @@ The application is fully responsive and optimized for:
 
 ## 📝 License
 
-Copyright © 2024 UMURENGE WALLET. All rights reserved.
+Copyright © 2024 IKIMINA WALLET. All rights reserved.
 
 

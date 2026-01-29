@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Group } = require('../models');
+const { getTerms } = require('../controllers/systemadmin.controller');
 
 // Public: minimal groups list for signup dropdown
 router.get('/groups', async (req, res) => {
@@ -11,6 +12,9 @@ router.get('/groups', async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to fetch groups', error: error.message });
   }
 });
+
+// Public: Get terms and conditions
+router.get('/terms', getTerms);
 
 module.exports = router;
 

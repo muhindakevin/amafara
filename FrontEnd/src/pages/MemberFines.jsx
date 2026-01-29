@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, DollarSign, Clock, CheckCircle, XCircle, Plus, Eye, Download, Calendar, TrendingUp, Search, Filter } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function MemberFines() {
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
   const [showPayFineModal, setShowPayFineModal] = useState(false)
   const [selectedFine, setSelectedFine] = useState(null)
 
@@ -45,14 +48,6 @@ function MemberFines() {
     return () => { mounted = false }
   }, [])
 
-  const performanceTrend = [
-    { month: 'Sep 2023', fines: 2, amount: 1000 },
-    { month: 'Oct 2023', fines: 1, amount: 500 },
-    { month: 'Nov 2023', fines: 1, amount: 500 },
-    { month: 'Dec 2023', fines: 2, amount: 1000 },
-    { month: 'Jan 2024', fines: 2, amount: 1000 }
-  ]
-
   const handlePayFine = (fine) => {
     setSelectedFine(fine)
     setShowPayFineModal(true)
@@ -69,7 +64,7 @@ function MemberFines() {
         setFines(list)
       }
     } catch (e) {
-      alert(e.response?.data?.message || 'Payment failed')
+      alert(e.response?.data?.message || t('paymentFailed', { defaultValue: 'Payment failed' }))
     }
   }
 
@@ -93,8 +88,8 @@ function MemberFines() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Fines & Penalties</h1>
-          <p className="text-gray-600 mt-1">View and pay fines for missed contributions or late repayments</p>
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('finesAndPenalties', { defaultValue: 'Fines & Penalties' })}</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">{t('viewPayFines', { defaultValue: 'View and pay fines for missed contributions or late repayments' })}</p>
         </div>
 
         {/* Stats Cards */}
@@ -102,8 +97,8 @@ function MemberFines() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Fines</p>
-                <p className="text-2xl font-bold text-gray-800">{fineStats.totalFines}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalFines', { defaultValue: 'Total Fines' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{fineStats.totalFines}</p>
               </div>
               <AlertCircle className="text-red-600" size={32} />
             </div>
@@ -111,8 +106,8 @@ function MemberFines() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Pending</p>
-                <p className="text-2xl font-bold text-gray-800">{fineStats.pending}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('pendingApprovals')}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{fineStats.pending}</p>
               </div>
               <Clock className="text-yellow-600" size={32} />
             </div>
@@ -120,8 +115,8 @@ function MemberFines() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Amount</p>
-                <p className="text-2xl font-bold text-gray-800">{fineStats.totalAmount.toLocaleString()} RWF</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalAmount', { defaultValue: 'Total Amount' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{fineStats.totalAmount.toLocaleString()} RWF</p>
               </div>
               <DollarSign className="text-blue-600" size={32} />
             </div>
@@ -129,8 +124,8 @@ function MemberFines() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Pending Amount</p>
-                <p className="text-2xl font-bold text-gray-800">{fineStats.pendingAmount.toLocaleString()} RWF</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('pendingAmount', { defaultValue: 'Pending Amount' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{fineStats.pendingAmount.toLocaleString()} RWF</p>
               </div>
               <XCircle className="text-orange-600" size={32} />
             </div>
@@ -140,53 +135,34 @@ function MemberFines() {
         {/* AI Penalty Insights */}
         <div className="card bg-gradient-to-r from-primary-50 to-blue-50 border-2 border-primary-200">
           <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-            🤖 AI Penalty Insights
+            🤖 {t('aiPenaltyInsights', { defaultValue: 'AI Penalty Insights' })}
           </h2>
           <div className="space-y-3">
             <div className="flex items-start gap-3">
               <TrendingUp className="text-primary-600 mt-1" size={20} />
               <div>
-                <p className="font-semibold text-gray-800">Performance Trend</p>
+                <p className="font-semibold text-gray-800">{t('performanceTrend', { defaultValue: 'Performance Trend' })}</p>
                 <p className="text-sm text-gray-600">
-                  You've had {fineStats.totalFines} fines in the last 5 months. Most fines are due to late contributions.
+                  {t('finesInLastMonths', { defaultValue: `You've had ${fineStats.totalFines} fines in the last 5 months. Most fines are due to late contributions.` })}
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <AlertCircle className="text-yellow-600 mt-1" size={20} />
               <div>
-                <p className="font-semibold text-gray-800">Recommendation</p>
+                <p className="font-semibold text-gray-800">{t('recommendation', { defaultValue: 'Recommendation' })}</p>
                 <p className="text-sm text-gray-600">
-                  Set up automatic reminders 2 days before contribution due dates to avoid late payments.
+                  {t('setUpReminders', { defaultValue: 'Set up automatic reminders 2 days before contribution due dates to avoid late payments.' })}
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <CheckCircle className="text-green-600 mt-1" size={20} />
               <div>
-                <p className="font-semibold text-gray-800">Good Standing</p>
+                <p className="font-semibold text-gray-800">{t('goodStanding', { defaultValue: 'Good Standing' })}</p>
                 <p className="text-sm text-gray-600">
-                  Your payment history shows improvement. Continue making timely payments to maintain good standing.
+                  {t('paymentHistoryImprovement', { defaultValue: 'Your payment history shows improvement. Continue making timely payments to maintain good standing.' })}
                 </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Performance Chart */}
-        <div className="card">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Fines Trend (Last 5 Months)</h2>
-          <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-            <div className="text-center">
-              <TrendingUp className="mx-auto text-gray-400 mb-2" size={48} />
-              <p className="text-gray-600">Fines trend chart would be displayed here</p>
-              <div className="mt-4 grid grid-cols-5 gap-2 text-xs">
-                {performanceTrend.map((item, index) => (
-                  <div key={index} className="text-center">
-                    <p className="font-semibold">{item.fines}</p>
-                    <p className="text-gray-500">{item.month.split(' ')[0]}</p>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
@@ -194,7 +170,7 @@ function MemberFines() {
 
         {/* Pending Fines */}
         <div className="card">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Fines</h2>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">{t('pendingFines', { defaultValue: 'Pending Fines' })}</h2>
           {fines.filter(f => f.status === 'pending').length > 0 ? (
             <div className="space-y-4">
               {fines.filter(f => f.status === 'pending').map((fine) => (
@@ -237,10 +213,10 @@ function MemberFines() {
                       onClick={() => handlePayFine(fine)}
                       className="btn-primary text-sm px-4 py-2"
                     >
-                      Pay Fine
+                      {t('payFine', { defaultValue: 'Pay Fine' })}
                     </button>
                     <button className="btn-secondary text-sm px-4 py-2">
-                      View Details
+                      {tCommon('viewDetails', { defaultValue: 'View Details' })}
                     </button>
                   </div>
                 </div>
@@ -249,8 +225,8 @@ function MemberFines() {
           ) : (
             <div className="text-center py-8 text-gray-500">
               <CheckCircle className="mx-auto mb-4 text-green-600" size={48} />
-              <p className="font-semibold">No pending fines</p>
-              <p className="text-sm">You're all caught up!</p>
+              <p className="font-semibold dark:text-gray-300">{t('noPendingFines', { defaultValue: 'No pending fines' })}</p>
+              <p className="text-sm dark:text-gray-400">{t('allCaughtUp', { defaultValue: "You're all caught up!" })}</p>
             </div>
           )}
         </div>
@@ -258,7 +234,7 @@ function MemberFines() {
         {/* Paid Fines History */}
         <div className="card">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800">Fines History</h2>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-white">{t('finesHistory', { defaultValue: 'Fines History' })}</h2>
             <div className="flex gap-2">
               <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <Search size={18} />

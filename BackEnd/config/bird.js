@@ -32,25 +32,58 @@ async function sendViaBird(to, subject, htmlContent) {
   return await response.json();
 }
 
-async function sendViaSmtp(to, subject, htmlContent) {
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || user;
+async function getSmtpConfig() {
+  // Try to get from database settings first
+  try {
+    const { Setting } = require('../src/models');
+    const emailSetting = await Setting.findOne({ where: { key: 'system_email' } });
+    if (emailSetting && emailSetting.value) {
+      const emailConfig = JSON.parse(emailSetting.value);
+      if (emailConfig.smtpHost && emailConfig.username && emailConfig.password) {
+        return {
+          host: emailConfig.smtpHost,
+          port: parseInt(emailConfig.smtpPort || '587', 10),
+          user: emailConfig.username,
+          pass: emailConfig.password,
+          from: emailConfig.username,
+          enabled: emailConfig.enabled !== false
+        };
+      }
+    }
+  } catch (error) {
+    console.warn('[getSmtpConfig] Error reading from database, using env vars:', error.message);
+  }
 
-  if (!host || !user || !pass) {
+  // Fall back to environment variables
+  return {
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    enabled: true
+  };
+}
+
+async function sendViaSmtp(to, subject, htmlContent) {
+  const config = await getSmtpConfig();
+
+  if (!config.enabled) {
+    throw new Error('Email service is disabled in system settings');
+  }
+
+  if (!config.host || !config.user || !config.pass) {
     throw new Error('SMTP not configured');
   }
 
   const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass }
+    host: config.host,
+    port: config.port,
+    secure: config.port === 465,
+    auth: { user: config.user, pass: config.pass }
   });
 
-  const info = await transporter.sendMail({ from, to, subject, html: htmlContent });
+  const info = await transporter.sendMail({ from: config.from, to, subject, html: htmlContent });
   return { success: true, messageId: info.messageId };
 }
 

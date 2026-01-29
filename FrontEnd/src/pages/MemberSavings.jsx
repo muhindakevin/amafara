@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { DollarSign, Plus, TrendingUp, Calendar, Clock, CheckCircle, AlertCircle, Download, Filter, Search, RefreshCw } from 'lucide-react'
 import Layout from '../components/Layout'
-import { getTranslation } from '../utils/translations'
-import { useLanguage } from '../contexts/LanguageContext'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import useApiState from '../hooks/useApiState'
 import jsPDF from 'jspdf'
+import * as XLSX from 'xlsx'
 
 function MemberSavings() {
-  const { language } = useLanguage()
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
+  const { t: tForms } = useTranslation('forms')
   const [showContributionModal, setShowContributionModal] = useState(false)
   const [contributionAmount, setContributionAmount] = useState('')
   const [contributionMethod, setContributionMethod] = useState('mobile-money')
@@ -32,6 +34,7 @@ function MemberSavings() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [minimumContribution, setMinimumContribution] = useState(0)
   const itemsPerPage = 10
 
   // Function to generate beautiful blue & white PDF receipt
@@ -55,11 +58,11 @@ function MemberSavings() {
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(24)
       doc.setFont('helvetica', 'bold')
-      doc.text('UMURENGE WALLET', pageWidth / 2, margin + 15, { align: 'center' })
+      doc.text('IKIMINA WALLET', pageWidth / 2, margin + 15, { align: 'center' })
       
       doc.setFontSize(14)
       doc.setFont('helvetica', 'normal')
-      doc.text('Payment Receipt', pageWidth / 2, margin + 25, { align: 'center' })
+      doc.text(t('paymentReceipt', { defaultValue: 'Payment Receipt' }), pageWidth / 2, margin + 25, { align: 'center' })
       
       let yPos = margin + 50
       
@@ -73,7 +76,7 @@ function MemberSavings() {
       yPos += 10
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('Transaction Details', margin + 10, yPos)
+      doc.text(t('transactionDetails', { defaultValue: 'Transaction Details' }), margin + 10, yPos)
       
       yPos += 8
       doc.setFont('helvetica', 'normal')
@@ -96,7 +99,7 @@ function MemberSavings() {
       
       // Payment Method
       doc.setFont('helvetica', 'bold')
-      doc.text('Payment Method:', margin + 10, yPos)
+      doc.text(t('paymentMethod', { defaultValue: 'Payment Method' }) + ':', margin + 10, yPos)
       doc.setFont('helvetica', 'normal')
       doc.text(contributionData.paymentMethod || 'Cash', margin + 50, yPos)
       yPos += 7
@@ -104,7 +107,7 @@ function MemberSavings() {
       // Receipt Number
       if (contributionData.receiptNumber) {
         doc.setFont('helvetica', 'bold')
-        doc.text('Receipt Number:', margin + 10, yPos)
+        doc.text(t('receiptNumber', { defaultValue: 'Receipt Number' }) + ':', margin + 10, yPos)
         doc.setFont('helvetica', 'normal')
         doc.setFont('courier', 'normal')
         doc.text(contributionData.receiptNumber, margin + 50, yPos)
@@ -121,7 +124,7 @@ function MemberSavings() {
       
       // New Total Savings
       doc.setFont('helvetica', 'bold')
-      doc.text('New Total Savings:', margin + 10, yPos)
+      doc.text(t('newTotalSavings', { defaultValue: 'New Total Savings' }) + ':', margin + 10, yPos)
       doc.setFont('helvetica', 'normal')
       const totalText = `${Number(contributionData.totalSavings || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF`
       doc.text(totalText, margin + 50, yPos)
@@ -132,7 +135,7 @@ function MemberSavings() {
       doc.setFontSize(12)
       doc.setFont('helvetica', 'italic')
       doc.setTextColor(...blueColor)
-      doc.text('Thank you for contributing to your group savings!', pageWidth / 2, yPos, { align: 'center' })
+      doc.text(t('thankYouForContributing', { defaultValue: 'Thank you for contributing to your group savings!' }), pageWidth / 2, yPos, { align: 'center' })
       
       yPos += 10
       
@@ -140,8 +143,8 @@ function MemberSavings() {
       doc.setFontSize(8)
       doc.setTextColor(128, 128, 128)
       doc.setFont('helvetica', 'normal')
-      doc.text('This is an official receipt from UMURENGE WALLET', pageWidth / 2, pageHeight - 15, { align: 'center' })
-      doc.text('For inquiries, please contact your group administrator', pageWidth / 2, pageHeight - 10, { align: 'center' })
+      doc.text(t('officialReceipt', { defaultValue: 'This is an official receipt from IKIMINA WALLET' }), pageWidth / 2, pageHeight - 15, { align: 'center' })
+      doc.text(t('forInquiriesContactAdmin', { defaultValue: 'For inquiries, please contact your group administrator' }), pageWidth / 2, pageHeight - 10, { align: 'center' })
       
       // Generate filename
       const receiptNum = contributionData.receiptNumber || `REC-${Date.now()}`
@@ -169,12 +172,23 @@ function MemberSavings() {
 
     wrap(async () => {
       try {
-        // Fetch all data in parallel for better performance
-        const [me, dash, contributions] = await Promise.all([
-          api.get('/auth/me'),
+        // Fetch user data first to get groupId
+        const me = await api.get('/auth/me')
+        const groupId = me.data?.data?.groupId
+        
+        // Fetch other data in parallel
+        const [dash, contributions, groupData] = await Promise.all([
           api.get('/members/dashboard'),
-          api.get('/contributions/member') // Fetch contributions directly from database
+          api.get('/contributions/member'), // Fetch contributions directly from database
+          groupId ? api.get(`/groups/${groupId}`).catch(() => ({ data: { success: false } })) : Promise.resolve({ data: { success: false } }) // Get group data for minimum contribution
         ])
+        
+        // Get minimum contribution amount from group
+        if (groupData.data?.success && groupData.data.data) {
+          const minAmount = Number(groupData.data.data.contributionAmount || 0)
+          setMinimumContribution(minAmount)
+          console.log(`[MemberSavings] Minimum contribution amount: ${minAmount} RWF`)
+        }
         
         // Calculate totalSavings from actual approved contributions (source of truth)
         let totalSavings = 0
@@ -231,10 +245,10 @@ function MemberSavings() {
           
           // Map payment method from database format to display format
           const paymentMethodMap = {
-            'mtn_mobile_money': 'MTN Mobile Money',
-            'airtel_money': 'Airtel Money',
-            'cash': 'Cash',
-            'bank_transfer': 'Bank Transfer'
+            'mtn_mobile_money': t('mtnMobileMoney', { defaultValue: 'MTN Mobile Money' }),
+            'airtel_money': t('airtelMoney', { defaultValue: 'Airtel Money' }),
+            'cash': t('cash', { defaultValue: 'Cash' }),
+            'bank_transfer': t('bankTransfer', { defaultValue: 'Bank Transfer' })
           }
           
           // Map status from database format to display format
@@ -676,14 +690,14 @@ function MemberSavings() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">My Savings</h1>
-            <p className="text-gray-600 mt-1">Group: {loading ? 'Loading…' : (savingsData.groupName || '—')}</p>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('mySavings')}</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">{t('group', { defaultValue: 'Group' })}: {loading ? tCommon('loading') : (savingsData.groupName || '—')}</p>
           </div>
           <button
             onClick={() => setShowContributionModal(true)}
             className="btn-primary flex items-center gap-2"
           >
-            <Plus size={18} /> Make Contribution
+            <Plus size={18} /> {t('makeContribution', { defaultValue: 'Make Contribution' })}
           </button>
         </div>
 
@@ -692,8 +706,8 @@ function MemberSavings() {
           <div className="card transition-all duration-500 hover:shadow-lg" key={`total-savings-${savingsData.totalSavings}`}>
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Savings</p>
-                <p className="text-2xl font-bold text-gray-800 transition-all duration-300">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalSavings')}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 transition-all duration-300">
                   {loading ? 'Loading…' : `${Number(savingsData.totalSavings || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF`}
                 </p>
                 {!loading && savingsData.totalSavings !== undefined && (
@@ -707,9 +721,9 @@ function MemberSavings() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Monthly Target</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {loading ? 'Loading…' : `${Number(savingsData.monthlyTarget||0).toLocaleString()} RWF`}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('monthlyTarget', { defaultValue: 'Monthly Target' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {loading ? tCommon('loading') : `${Number(savingsData.monthlyTarget||0).toLocaleString()} RWF`}
                 </p>
               </div>
               <TrendingUp className="text-blue-600" size={32} />
@@ -719,9 +733,9 @@ function MemberSavings() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">This Month</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {loading ? 'Loading…' : `${savingsData.contributionsThisMonth || 0} contributions`}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('thisMonth', { defaultValue: 'This Month' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {loading ? tCommon('loading') : `${savingsData.contributionsThisMonth || 0} ${t('contributions', { defaultValue: 'contributions' })}`}
                 </p>
               </div>
               <Calendar className="text-purple-600" size={32} />
@@ -731,9 +745,9 @@ function MemberSavings() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Next Due</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {loading ? 'Loading…' : (savingsData.nextDueDate || '—')}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('nextDue', { defaultValue: 'Next Due' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {loading ? tCommon('loading') : (savingsData.nextDueDate || '—')}
                 </p>
               </div>
               <Clock className="text-orange-600" size={32} />
@@ -744,20 +758,20 @@ function MemberSavings() {
         {/* Contribution History */}
         <div className="card">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-            <h2 className="text-xl font-bold text-gray-800">Contribution History</h2>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-white">{t('contributionHistory', { defaultValue: 'Contribution History' })}</h2>
             <div className="flex flex-wrap gap-2">
               {/* Search Input */}
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
-                  placeholder="Search by amount, method..."
+                  placeholder={t('searchByAmountMethod', { defaultValue: 'Search by amount, method...' })}
+                  className="pl-8 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value)
                     setCurrentPage(1) // Reset to first page on search
                   }}
-                  className="pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               
@@ -770,10 +784,10 @@ function MemberSavings() {
                 }}
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">All Status</option>
-                <option value="completed">Approved</option>
-                <option value="pending">Pending</option>
-                <option value="failed">Rejected</option>
+                <option value="all">{t('allStatus', { defaultValue: 'All Status' })}</option>
+                <option value="completed">{t('approved')}</option>
+                <option value="pending">{tCommon('pending')}</option>
+                <option value="failed">{t('rejected', { defaultValue: 'Rejected' })}</option>
               </select>
               
               <button 
@@ -791,57 +805,198 @@ function MemberSavings() {
               <button 
                 onClick={async () => {
                   try {
-                    // Generate report from current contribution history
-                    const reportData = contributionHistory.map(c => {
-                      const date = c.date || (c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-US') : 'N/A')
+                    // Fetch ALL transactions (not just contributions) to match the report format
+                    const transactionsRes = await api.get('/transactions?limit=1000')
+                    const allTransactions = transactionsRes.data?.success ? (transactionsRes.data.data || []) : []
+                    
+                    // Get member name
+                    const memberName = savingsData.memberName || 'Member'
+                    
+                    // Process transactions to match the report format
+                    const processedTransactions = allTransactions.map(t => {
+                      // Format date and time
+                      let dateTimeStr = 'N/A'
+                      if (t.transactionDate) {
+                        try {
+                          const dateObj = new Date(t.transactionDate)
+                          if (!isNaN(dateObj.getTime())) {
+                            const dateStr = dateObj.toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit'
+                            })
+                            const timeStr = dateObj.toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            })
+                            dateTimeStr = `${dateStr} ${timeStr}`
+                          }
+                        } catch (e) {
+                          dateTimeStr = String(t.transactionDate)
+                        }
+                      } else if (t.createdAt) {
+                        try {
+                          const dateObj = new Date(t.createdAt)
+                          if (!isNaN(dateObj.getTime())) {
+                            const dateStr = dateObj.toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit'
+                            })
+                            const timeStr = dateObj.toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            })
+                            dateTimeStr = `${dateStr} ${timeStr}`
+                          }
+                        } catch (e) {
+                          dateTimeStr = String(t.createdAt)
+                        }
+                      }
+                      
+                      // Format transaction type
+                      let transactionType = 'Transaction'
+                      if (t.type === 'contribution') {
+                        transactionType = 'Contribution'
+                      } else if (t.type === 'loan_payment') {
+                        transactionType = 'Loan Payment'
+                      } else if (t.type === 'loan_disbursement') {
+                        transactionType = 'Loan Request'
+                      } else if (t.type === 'fine_payment') {
+                        transactionType = 'Fine Payment'
+                      } else if (t.type === 'interest') {
+                        transactionType = 'Interest'
+                      } else if (t.type === 'refund') {
+                        transactionType = 'Refund'
+                      } else {
+                        transactionType = t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1).replace(/_/g, ' ') : 'Transaction'
+                      }
+                      
+                      // Format payment method
+                      const paymentMethod = t.paymentMethod || t.method || 'N/A'
+                      
+                      // Format status
+                      const status = (t.status || 'completed').toUpperCase()
+                      
+                      // Format description
+                      let description = t.description || ''
+                      if (t.type === 'contribution' && t.referenceId) {
+                        description = `Contribution: ${t.referenceId}`
+                      } else if (t.type === 'loan_payment') {
+                        description = description || 'Loan payment'
+                      } else if (t.type === 'loan_disbursement') {
+                        description = description || 'Loan disbursement'
+                      }
+                      
                       return {
-                        date: date,
-                        amount: Number(c.amount || 0).toFixed(2),
-                        method: c.method || 'Cash',
-                        status: c.status === 'completed' ? 'Approved' : c.status === 'pending' ? 'Pending' : 'Rejected',
-                        receipt: c.receiptNumber || 'N/A'
+                        'Transaction ID': t.id || 'N/A',
+                        'Member Name': memberName,
+                        'Date & Time': dateTimeStr,
+                        'Transaction Type': transactionType,
+                        'Amount': Number(t.amount || 0).toFixed(2),
+                        'Payment Method': paymentMethod,
+                        'Status': status,
+                        'Description / Notes': description
                       }
                     })
                     
-                    // Calculate totals
-                    const totalAmount = contributionHistory.reduce((sum, c) => sum + Number(c.amount || 0), 0)
-                    const approvedCount = contributionHistory.filter(c => c.status === 'completed').length
-                    const totalApproved = contributionHistory
-                      .filter(c => c.status === 'completed')
-                      .reduce((sum, c) => sum + Number(c.amount || 0), 0)
+                    // Sort by date (newest first)
+                    processedTransactions.sort((a, b) => {
+                      const dateA = a['Date & Time'] === 'N/A' ? new Date(0) : new Date(a['Date & Time'])
+                      const dateB = b['Date & Time'] === 'N/A' ? new Date(0) : new Date(b['Date & Time'])
+                      return dateB - dateA
+                    })
                     
-                    // Create report content
-                    const reportLines = [
-                      'CONTRIBUTION REPORT',
-                      `Generated: ${new Date().toLocaleString()}`,
-                      `Member: ${savingsData.groupName || 'N/A'}`,
-                      `Total Savings: ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF`,
-                      `Approved Contributions: ${approvedCount}`,
-                      `Total Approved Amount: ${totalApproved.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF`,
-                      '',
-                      'DETAILED CONTRIBUTIONS',
-                      'Date\tAmount (RWF)\tPayment Method\tStatus\tReceipt Number',
-                      ...reportData.map(r => `${r.date}\t${r.amount}\t${r.method}\t${r.status}\t${r.receipt}`)
+                    // Calculate summary statistics
+                    const totalTransactions = processedTransactions.length
+                    const totalAmount = processedTransactions.reduce((sum, t) => sum + Number(t.Amount || 0), 0)
+                    
+                    // Transaction type breakdown
+                    const typeBreakdown = {}
+                    processedTransactions.forEach(t => {
+                      const type = t['Transaction Type']
+                      if (!typeBreakdown[type]) {
+                        typeBreakdown[type] = { count: 0, amount: 0 }
+                      }
+                      typeBreakdown[type].count++
+                      typeBreakdown[type].amount += Number(t.Amount || 0)
+                    })
+                    
+                    // Create workbook
+                    const workbook = XLSX.utils.book_new()
+                    
+                    // Summary sheet (matching the report format from the image)
+                    const summaryData = [
+                      ['TRANSACTION REPORT'],
+                      ['Generated:', new Date().toLocaleString()],
+                      ['Member:', memberName],
+                      ['Group:', savingsData.groupName || 'N/A'],
+                      [''],
+                      ['SUMMARY'],
+                      ['Total Transactions:', totalTransactions],
+                      ['Total Amount:', `${totalAmount.toFixed(2)} RWF`],
+                      [''],
+                      ['TRANSACTION TYPE BREAKDOWN']
                     ]
                     
-                    const blob = new Blob([reportLines.join('\n')], { type: 'text/plain' })
+                    // Add transaction type breakdown (matching the format: "type: Count: X, Amount: Y RWF")
+                    // Sort by type name for consistency
+                    Object.keys(typeBreakdown).sort().forEach(type => {
+                      const breakdown = typeBreakdown[type]
+                      summaryData.push([`${type}:`, `Count: ${breakdown.count}, Amount: ${breakdown.amount.toFixed(2)} RWF`])
+                    })
+                    
+                    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+                    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+                    
+                    // Transactions detail sheet
+                    const transactionsSheet = XLSX.utils.json_to_sheet(processedTransactions)
+                    
+                    // Set column widths
+                    transactionsSheet['!cols'] = [
+                      { wch: 12 }, // Transaction ID
+                      { wch: 20 }, // Member Name
+                      { wch: 25 }, // Date & Time
+                      { wch: 18 }, // Transaction Type
+                      { wch: 12 }, // Amount
+                      { wch: 18 }, // Payment Method
+                      { wch: 12 }, // Status
+                      { wch: 40 }  // Description / Notes
+                    ]
+                    
+                    // Freeze header row
+                    transactionsSheet['!freeze'] = { xSplit: 0, ySplit: 1 }
+                    
+                    XLSX.utils.book_append_sheet(workbook, transactionsSheet, 'Transactions')
+                    
+                    // Generate Excel file
+                    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+                    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
                     const url = window.URL.createObjectURL(blob)
                     const a = document.createElement('a')
                     a.href = url
-                    a.download = `my-contributions-report-${new Date().toISOString().split('T')[0]}.txt`
+                    a.download = `transactions-report-${new Date().toISOString().split('T')[0]}.xlsx`
                     document.body.appendChild(a)
                     a.click()
                     window.URL.revokeObjectURL(url)
                     document.body.removeChild(a)
                     
-                    console.log('[MemberSavings] Report generated successfully')
+                    console.log('[MemberSavings] Transaction report generated successfully', {
+                      totalTransactions,
+                      totalAmount,
+                      typeBreakdown
+                    })
                   } catch (err) {
-                    console.error('[MemberSavings] Error generating report:', err)
-                    alert('Failed to generate report. Please try again.')
+                    console.error('[MemberSavings] Error generating transaction report:', err)
+                    alert('Failed to generate transaction report. Please try again.')
                   }
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Download contribution report"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                title="Download transaction report as Excel"
               >
                 <Download size={18} />
               </button>
@@ -930,7 +1085,7 @@ function MemberSavings() {
                   </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
-                          <p className="font-bold text-lg text-gray-800">
+                          <p className="font-bold text-lg text-gray-800 dark:text-gray-100">
                             {Number(contribution.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
                           </p>
                           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(contribution.status)}`}>
@@ -1045,7 +1200,7 @@ function MemberSavings() {
 
         {/* Group Rules */}
         <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
-          <h3 className="text-lg font-bold text-gray-800 mb-3">Group Contribution Rules</h3>
+          <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-3">{t('groupContributionRules', { defaultValue: 'Group Contribution Rules' })}</h3>
           <div className="space-y-2 text-sm text-gray-700">
             <div className="flex items-center gap-2">
               <CheckCircle className="text-green-600" size={16} />
@@ -1076,20 +1231,20 @@ function MemberSavings() {
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <CheckCircle className="text-green-600" size={40} />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Payment Successful!</h2>
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">{t('paymentSuccessful', { defaultValue: 'Payment Successful!' })}</h2>
                 <p className="text-gray-600">Your contribution has been recorded successfully</p>
               </div>
               
               <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Amount:</span>
-                  <span className="font-bold text-lg text-gray-800">
+                  <span className="font-bold text-lg text-gray-800 dark:text-gray-100">
                     {Number(successContribution.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Payment Method:</span>
-                  <span className="font-semibold text-gray-800">{successContribution.paymentMethod}</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-100">{successContribution.paymentMethod}</span>
                 </div>
                 {successContribution.receiptNumber && (
                   <div className="flex justify-between items-center">
@@ -1098,7 +1253,7 @@ function MemberSavings() {
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-3 border-t border-gray-200">
-                  <span className="text-gray-600 font-semibold">New Total Savings:</span>
+                  <span className="text-gray-600 dark:text-gray-400 font-semibold">{t('newTotalSavings', { defaultValue: 'New Total Savings' })}:</span>
                   <span className="font-bold text-xl text-green-600">
                     {Number(successContribution.totalSavings || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
                   </span>
@@ -1153,7 +1308,7 @@ function MemberSavings() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-slide-in">
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Make Contribution</h2>
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">{t('makeContribution')}</h2>
               
               {/* Success Message */}
               {successMessage && (
@@ -1164,18 +1319,42 @@ function MemberSavings() {
               )}
               
               <div className="space-y-4">
+                {minimumContribution > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                    <div className="flex items-center gap-2 text-blue-800">
+                      <AlertCircle size={16} />
+                      <span className="text-sm font-semibold">
+                        Minimum Contribution: {minimumContribution.toLocaleString()} RWF
+                      </span>
+                    </div>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Your contribution must be at least {minimumContribution.toLocaleString()} RWF
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Amount (RWF)
+                    {minimumContribution > 0 && (
+                      <span className="text-xs text-gray-500 ml-2">
+                        (Minimum: {minimumContribution.toLocaleString()} RWF)
+                      </span>
+                    )}
                   </label>
                   <input
                     type="number"
                     value={contributionAmount}
                     onChange={(e) => setContributionAmount(e.target.value)}
-                    placeholder="5000"
-                    className="input-field"
+                    placeholder={minimumContribution > 0 ? minimumContribution.toString() : "5000"}
+                    min={minimumContribution > 0 ? minimumContribution : undefined}
+                    className={`input-field ${contributionAmount && parseFloat(contributionAmount) < minimumContribution && minimumContribution > 0 ? 'border-red-300 bg-red-50' : ''}`}
                     disabled={isSubmitting}
                   />
+                  {contributionAmount && parseFloat(contributionAmount) < minimumContribution && minimumContribution > 0 && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Amount must be at least {minimumContribution.toLocaleString()} RWF
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1195,7 +1374,7 @@ function MemberSavings() {
                 </div>
 
                 <div className="bg-gray-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-gray-800 mb-2">Contribution Summary</h3>
+                  <h3 className="font-semibold text-gray-800 dark:text-white mb-2">{t('contributionSummary', { defaultValue: 'Contribution Summary' })}</h3>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
                       <span>Amount:</span>
@@ -1239,7 +1418,7 @@ function MemberSavings() {
                 </button>
                 <button
                   onClick={handleContribution}
-                  disabled={!contributionAmount || contributionAmount <= 0 || isSubmitting}
+                  disabled={!contributionAmount || contributionAmount <= 0 || (minimumContribution > 0 && parseFloat(contributionAmount) < minimumContribution) || isSubmitting}
                   className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (

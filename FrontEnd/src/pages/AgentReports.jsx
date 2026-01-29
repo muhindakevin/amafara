@@ -1,178 +1,133 @@
 import { useState, useEffect } from 'react'
 import { BarChart3, Download, TrendingUp, TrendingDown, Users, DollarSign, Building2, FileText, Calendar, Filter, Eye, Share2 } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
+import LoadingSpinner from '../components/LoadingSpinner'
+import * as XLSX from 'xlsx'
 
 function AgentReports() {
+  const { t } = useTranslation('common')
+  const { t: tAgent } = useTranslation('agent')
   const [selectedReport, setSelectedReport] = useState('performance')
   const [dateRange, setDateRange] = useState('monthly')
   const [selectedGroup, setSelectedGroup] = useState('all')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [showCustomRange, setShowCustomRange] = useState(false)
   const [groups, setGroups] = useState([])
   const [performanceData, setPerformanceData] = useState(null)
   const [memberAnalytics, setMemberAnalytics] = useState(null)
   const [financialData, setFinancialData] = useState(null)
   const [complianceData, setComplianceData] = useState(null)
   const [riskAnalysis, setRiskAnalysis] = useState(null)
+  const [summary, setSummary] = useState({
+    totalContributions: 0,
+    totalLoans: 0,
+    totalMembers: 0,
+    avgCompliance: 0
+  })
   const [loading, setLoading] = useState(true)
 
+  // Load groups list from database
   useEffect(() => {
-    let mounted = true
-    async function loadReportData() {
+    async function loadGroups() {
       try {
-        setLoading(true)
-        const [groupsRes, analyticsRes, loansRes, contributionsRes, transactionsRes, usersRes] = await Promise.all([
-          api.get('/groups'),
-          api.get('/analytics'),
-          api.get('/loans').catch(() => ({ data: { success: false, data: [] } })),
-          api.get('/contributions').catch(() => ({ data: { success: false, data: [] } })),
-          api.get('/transactions').catch(() => ({ data: { success: false, data: [] } })),
-          api.get('/system-admin/users').catch(() => ({ data: { success: false, data: [] } }))
-        ])
-
-        if (!mounted) return
-
-        const groupsData = groupsRes.data?.data || []
-        const analytics = analyticsRes.data?.data || {}
-        const loans = loansRes.data?.data || []
-        const contributions = contributionsRes.data?.data || []
-        const transactions = transactionsRes.data?.data || []
-        const users = usersRes.data?.data || []
-
-        // Set groups with "All Groups" option
-        setGroups([{ id: 'all', name: 'All Groups' }, ...groupsData.map(g => ({ id: g.id, name: g.name }))])
-
-        // Calculate performance data
-        const performanceGroups = groupsData.map(g => {
-          const groupLoans = loans.filter(l => l.groupId === g.id)
-          const groupContributions = contributions.filter(c => c.groupId === g.id)
-          const totalLoans = groupLoans.reduce((sum, l) => sum + Number(l.amount || 0), 0)
-          const totalContributions = Number(g.totalSavings || 0)
-          
-          // Calculate performance score
-          const repaymentRate = groupLoans.length > 0 
-            ? Math.round((groupLoans.filter(l => l.status === 'completed' || l.status === 'paid').length / groupLoans.length) * 100)
-            : 100
-          const score = Math.round((repaymentRate * 0.6) + ((totalContributions > 0 ? 100 : 0) * 0.4))
-
-          return {
-            name: g.name,
-            contributions: totalContributions,
-            loans: totalLoans,
-            members: g.totalMembers || 0,
-            score
-          }
-        })
-
-        setPerformanceData({
-          groups: performanceGroups,
-          trends: {
-            contributions: { 
-              current: analytics.totalSavings || 0, 
-              previous: 0, 
-              change: 0 
-            },
-            loans: { 
-              current: loans.reduce((sum, l) => sum + Number(l.amount || 0), 0), 
-              previous: 0, 
-              change: 0 
-            },
-            members: { 
-              current: analytics.totalMembers || 0, 
-              previous: 0, 
-              change: 0 
-            },
-            compliance: { 
-              current: groupsData.length > 0 
-                ? Math.round(groupsData.filter(g => g.status === 'active').length / groupsData.length * 100)
-                : 0, 
-              previous: 0, 
-              change: 0 
-            }
-          }
-        })
-
-        // Member analytics
-        const members = users.filter(u => u.role === 'Member' && u.role !== 'Agent' && u.role !== 'System Admin')
-        setMemberAnalytics({
-          totalMembers: members.length,
-          activeMembers: members.filter(m => m.status === 'active').length,
-          newMembers: members.filter(m => {
-            const created = new Date(m.createdAt)
-            const monthAgo = new Date()
-            monthAgo.setMonth(monthAgo.getMonth() - 1)
-            return created > monthAgo
-          }).length,
-          suspendedMembers: members.filter(m => m.status === 'suspended').length,
-          memberGrowth: [],
-          topPerformingMembers: members
-            .sort((a, b) => (b.totalSavings || 0) - (a.totalSavings || 0))
-            .slice(0, 3)
-            .map(m => ({
-              name: m.name,
-              group: groupsData.find(g => g.id === m.groupId)?.name || 'Unknown',
-              contributions: Number(m.totalSavings || 0),
-              loans: 0
+        // Fetch all groups with viewAll parameter to get all groups regardless of status
+        const { data } = await api.get('/groups', { params: { viewAll: 'true' } })
+        if (data?.success) {
+          const groupsData = data.data || []
+          console.log('[AgentReports] Loaded groups:', groupsData.length)
+          // Set groups with "All Groups" option first, then all other groups
+          setGroups([
+            { id: 'all', name: 'All Groups' }, 
+            ...groupsData.map(g => ({ 
+              id: g.id, 
+              name: g.name || `Group ${g.id}`,
+              code: g.code || '',
+              district: g.district || ''
             }))
-        })
-
-        // Financial data
-        const totalLoans = loans.reduce((sum, l) => sum + Number(l.amount || 0), 0)
-        const totalRepayments = transactions
-          .filter(t => t.type === 'loan_repayment')
-          .reduce((sum, t) => sum + Number(t.amount || 0), 0)
-        const outstandingLoans = loans
-          .filter(l => ['approved', 'disbursed', 'active'].includes(l.status))
-          .reduce((sum, l) => sum + Number(l.amount || 0), 0) - totalRepayments
-
-        setFinancialData({
-          totalContributions: analytics.totalSavings || 0,
-          totalLoans,
-          totalRepayments,
-          outstandingLoans,
-          monthlyContributions: [],
-          loanPerformance: {
-            current: loans.filter(l => ['approved', 'disbursed', 'active'].includes(l.status)).length,
-            overdue: loans.filter(l => l.status === 'overdue').length,
-            defaulted: loans.filter(l => l.status === 'defaulted').length
-          }
-        })
-
-        // Compliance data
-        const activeGroups = groupsData.filter(g => g.status === 'active').length
-        setComplianceData({
-          overallScore: groupsData.length > 0 
-            ? Math.round((activeGroups / groupsData.length) * 100)
-            : 0,
-          groupsCompliant: activeGroups,
-          groupsAtRisk: groupsData.filter(g => g.status !== 'active').length,
-          violations: 0,
-          resolvedViolations: 0,
-          pendingViolations: 0,
-          complianceTrends: []
-        })
-
-        // Risk analysis
-        const highRisk = groupsData.filter(g => g.status !== 'active').length
-        setRiskAnalysis({
-          highRiskGroups: highRisk,
-          mediumRiskGroups: 0,
-          lowRiskGroups: activeGroups,
-          riskFactors: [],
-          recommendations: highRisk > 0 ? [
-            'Monitor inactive groups closely',
-            'Review group compliance regularly',
-            'Provide additional support to struggling groups'
-          ] : []
-        })
+          ])
+        } else {
+          console.warn('[AgentReports] Failed to load groups:', data)
+          // Set default "All Groups" option if loading fails
+          setGroups([{ id: 'all', name: 'All Groups' }])
+        }
       } catch (err) {
-        console.error('Failed to load report data:', err)
-      } finally {
-        if (mounted) setLoading(false)
+        console.error('[AgentReports] Failed to load groups:', err)
+        // Set default "All Groups" option on error
+        setGroups([{ id: 'all', name: 'All Groups' }])
       }
     }
-    loadReportData()
-    return () => { mounted = false }
+    loadGroups()
   }, [])
+
+  // Load report data from backend
+  const loadReportData = async () => {
+    try {
+      setLoading(true)
+      const params = {
+        reportType: selectedReport
+      }
+
+      // Add date range
+      if (customStartDate && customEndDate) {
+        params.startDate = customStartDate
+        params.endDate = customEndDate
+      } else {
+        params.dateRange = dateRange
+      }
+
+      // Add group filter
+      if (selectedGroup && selectedGroup !== 'all') {
+        params.groupId = selectedGroup
+      }
+
+      console.log('[AgentReports] Fetching report data with params:', params)
+      const { data } = await api.get('/agent/reports', { params })
+
+      if (data?.success) {
+        console.log('[AgentReports] Received data:', data.data)
+        setSummary(data.data.summary || {
+          totalContributions: 0,
+          totalLoans: 0,
+          totalMembers: 0,
+          avgCompliance: 0
+        })
+        setPerformanceData(data.data.performance || null)
+        setMemberAnalytics(data.data.memberAnalytics || null)
+        setFinancialData(data.data.financial || null)
+        setComplianceData(data.data.compliance || null)
+        setRiskAnalysis(data.data.risk || null)
+      } else {
+        console.warn('[AgentReports] No success in response:', data)
+        // Reset all data to null/empty on error
+        setSummary({ totalContributions: 0, totalLoans: 0, totalMembers: 0, avgCompliance: 0 })
+        setPerformanceData(null)
+        setMemberAnalytics(null)
+        setFinancialData(null)
+        setComplianceData(null)
+        setRiskAnalysis(null)
+      }
+      } catch (err) {
+      console.error('[AgentReports] Failed to load report data:', err)
+      // Reset all data to null/empty on error
+      setSummary({ totalContributions: 0, totalLoans: 0, totalMembers: 0, avgCompliance: 0 })
+      setPerformanceData(null)
+      setMemberAnalytics(null)
+      setFinancialData(null)
+      setComplianceData(null)
+      setRiskAnalysis(null)
+      } finally {
+      setLoading(false)
+      }
+    }
+
+  // Load data on mount and when filters change
+  useEffect(() => {
+    loadReportData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedReport, dateRange, selectedGroup, customStartDate, customEndDate])
 
   const reportTypes = [
     { id: 'performance', name: 'Group Performance', icon: BarChart3 },
@@ -182,160 +137,128 @@ function AgentReports() {
     { id: 'risk', name: 'Risk Analysis', icon: TrendingDown }
   ]
 
-  const performanceData_OLD = {
-    groups: [
-      { name: 'Abakunzi Cooperative', contributions: 2250000, loans: 1200000, members: 45, score: 98 },
-      { name: 'Twitezimbere Group', contributions: 1900000, loans: 950000, members: 38, score: 95 },
-      { name: 'Umutima Wacu', contributions: 2100000, loans: 1100000, members: 42, score: 92 },
-      { name: 'Abanyarwanda Cooperative', contributions: 1750000, loans: 800000, members: 35, score: 75 }
-    ],
-    trends: {
-      contributions: { current: 8000000, previous: 7500000, change: 6.7 },
-      loans: { current: 4050000, previous: 3800000, change: 6.6 },
-      members: { current: 160, previous: 155, change: 3.2 },
-      compliance: { current: 90, previous: 88, change: 2.3 }
+  const handleExportReport = async () => {
+    try {
+      // Prepare data for Excel export
+      const workbook = XLSX.utils.book_new()
+      
+      // Get report type name
+      const reportTypeName = reportTypes.find(r => r.id === selectedReport)?.name || selectedReport
+      const groupName = selectedGroup === 'all' ? 'All Groups' : groups.find(g => g.id === selectedGroup)?.name || 'Unknown'
+      const dateRangeText = customStartDate && customEndDate 
+        ? `${customStartDate} to ${customEndDate}`
+        : dateRange
+
+      // Summary sheet
+      const summaryData = [
+        ['IKIMINA WALLET - REPORT EXPORT'],
+        [`Report Type: ${reportTypeName}`],
+        [`Date Range: ${dateRangeText}`],
+        [`Group: ${groupName}`],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [],
+        ['SUMMARY'],
+        ['Total Contributions (RWF)', summary.totalContributions],
+        ['Total Loans (RWF)', summary.totalLoans],
+        ['Total Members', summary.totalMembers],
+        ['Average Compliance (%)', summary.avgCompliance]
+      ]
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+
+      // Report-specific sheets
+      if (selectedReport === 'performance' && performanceData) {
+        const perfData = [
+          ['Group Name', 'Code', 'Contributions (RWF)', 'Loans (RWF)', 'Members', 'Performance Score (%)']
+        ]
+        performanceData.groups.forEach(g => {
+          perfData.push([g.name, g.code || '', g.contributions, g.loans, g.members, g.score])
+        })
+        const perfSheet = XLSX.utils.aoa_to_sheet(perfData)
+        XLSX.utils.book_append_sheet(workbook, perfSheet, 'Group Performance')
+      }
+
+      if (selectedReport === 'members' && memberAnalytics) {
+        const memberData = [
+          ['Metric', 'Value'],
+          ['Total Members', memberAnalytics.totalMembers],
+          ['Active Members', memberAnalytics.activeMembers],
+          ['New Members', memberAnalytics.newMembers],
+          ['Suspended Members', memberAnalytics.suspendedMembers],
+          [],
+          ['Top Performing Members'],
+          ['Name', 'Group', 'Contributions (RWF)', 'Loans (RWF)']
+        ]
+        memberAnalytics.topPerformingMembers.forEach(m => {
+          memberData.push([m.name, m.group, m.contributions, m.loans])
+        })
+        const memberSheet = XLSX.utils.aoa_to_sheet(memberData)
+        XLSX.utils.book_append_sheet(workbook, memberSheet, 'Member Analytics')
+      }
+
+      if (selectedReport === 'financial' && financialData) {
+        const financialDataSheet = [
+          ['Metric', 'Value (RWF)'],
+          ['Total Contributions', financialData.totalContributions],
+          ['Total Loans', financialData.totalLoans],
+          ['Total Repayments', financialData.totalRepayments],
+          ['Outstanding Loans', financialData.outstandingLoans],
+          [],
+          ['Loan Performance'],
+          ['Current Loans', financialData.loanPerformance.current],
+          ['Overdue Loans', financialData.loanPerformance.overdue],
+          ['Defaulted Loans', financialData.loanPerformance.defaulted]
+        ]
+        const finSheet = XLSX.utils.aoa_to_sheet(financialDataSheet)
+        XLSX.utils.book_append_sheet(workbook, finSheet, 'Financial Report')
+      }
+
+      if (selectedReport === 'compliance' && complianceData) {
+        const complianceDataSheet = [
+          ['Metric', 'Value'],
+          ['Overall Score (%)', complianceData.overallScore],
+          ['Compliant Groups', complianceData.groupsCompliant],
+          ['At Risk Groups', complianceData.groupsAtRisk],
+          ['Total Violations', complianceData.violations],
+          ['Resolved Violations', complianceData.resolvedViolations],
+          ['Pending Violations', complianceData.pendingViolations]
+        ]
+        const compSheet = XLSX.utils.aoa_to_sheet(complianceDataSheet)
+        XLSX.utils.book_append_sheet(workbook, compSheet, 'Compliance Report')
+      }
+
+      if (selectedReport === 'risk' && riskAnalysis) {
+        const riskDataSheet = [
+          ['Risk Level', 'Number of Groups'],
+          ['High Risk', riskAnalysis.highRiskGroups],
+          ['Medium Risk', riskAnalysis.mediumRiskGroups],
+          ['Low Risk', riskAnalysis.lowRiskGroups],
+          [],
+          ['Recommendations']
+        ]
+        riskAnalysis.recommendations.forEach(rec => {
+          riskDataSheet.push([rec])
+        })
+        const riskSheet = XLSX.utils.aoa_to_sheet(riskDataSheet)
+        XLSX.utils.book_append_sheet(workbook, riskSheet, 'Risk Analysis')
+      }
+
+      // Generate filename
+      const dateStr = new Date().toISOString().split('T')[0]
+      const filename = `${selectedReport}-report-${dateStr}.xlsx`
+
+      // Write and download
+      XLSX.writeFile(workbook, filename)
+      alert('Report exported successfully as Excel file!')
+    } catch (err) {
+      console.error('Failed to export report:', err)
+      alert('Failed to export report. Please try again.')
     }
-  }
-
-  const memberAnalytics_OLD = {
-    totalMembers: 160,
-    activeMembers: 145,
-    newMembers: 12,
-    suspendedMembers: 3,
-    memberGrowth: [
-      { month: 'Jan', count: 148 },
-      { month: 'Feb', count: 152 },
-      { month: 'Mar', count: 155 },
-      { month: 'Apr', count: 158 },
-      { month: 'May', count: 160 }
-    ],
-    topPerformingMembers: [
-      { name: 'Kamikazi Marie', group: 'Abakunzi', contributions: 500000, loans: 200000 },
-      { name: 'Mukamana Alice', group: 'Abakunzi', contributions: 450000, loans: 150000 },
-      { name: 'Mutabazi Paul', group: 'Twitezimbere', contributions: 480000, loans: 180000 }
-    ]
-  }
-
-  const financialData_OLD = {
-    totalContributions: 8000000,
-    totalLoans: 4050000,
-    totalRepayments: 3200000,
-    outstandingLoans: 850000,
-    monthlyContributions: [
-      { month: 'Jan', amount: 1500000 },
-      { month: 'Feb', amount: 1600000 },
-      { month: 'Mar', amount: 1700000 },
-      { month: 'Apr', amount: 1800000 },
-      { month: 'May', amount: 1900000 }
-    ],
-    loanPerformance: {
-      current: 85,
-      overdue: 12,
-      defaulted: 3
-    }
-  }
-
-  const complianceData_OLD = {
-    overallScore: 90,
-    groupsCompliant: 3,
-    groupsAtRisk: 1,
-    violations: 4,
-    resolvedViolations: 2,
-    pendingViolations: 2,
-    complianceTrends: [
-      { month: 'Jan', score: 85 },
-      { month: 'Feb', score: 87 },
-      { month: 'Mar', score: 88 },
-      { month: 'Apr', score: 89 },
-      { month: 'May', score: 90 }
-    ]
-  }
-
-  const riskAnalysis_OLD = {
-    highRiskGroups: 1,
-    mediumRiskGroups: 1,
-    lowRiskGroups: 2,
-    riskFactors: [
-      { factor: 'Low Repayment Rate', groups: 2, severity: 'medium' },
-      { factor: 'Poor Attendance', groups: 1, severity: 'high' },
-      { factor: 'Financial Irregularities', groups: 1, severity: 'high' },
-      { factor: 'Late Contributions', groups: 3, severity: 'low' }
-    ],
-    recommendations: [
-      'Increase monitoring for Abanyarwanda Cooperative',
-      'Implement additional training for group leaders',
-      'Review loan approval processes',
-      'Strengthen compliance monitoring'
-    ]
   }
 
   const handleGenerateReport = async () => {
-    try {
-      let reportContent = `UMURENGE WALLET - ${selectedReport.toUpperCase()} REPORT\n`
-      reportContent += `Generated: ${new Date().toLocaleString()}\n`
-      reportContent += `Date Range: ${dateRange}\n`
-      reportContent += `Group: ${selectedGroup === 'all' ? 'All Groups' : groups.find(g => g.id === selectedGroup)?.name || selectedGroup}\n\n`
-
-      switch (selectedReport) {
-        case 'performance':
-          if (performanceData) {
-            reportContent += 'GROUP PERFORMANCE\n' + '='.repeat(80) + '\n'
-            performanceData.groups.forEach(g => {
-              reportContent += `${g.name}: Contributions: ${g.contributions.toLocaleString()} RWF, Loans: ${g.loans.toLocaleString()} RWF, Members: ${g.members}, Score: ${g.score}%\n`
-            })
-          }
-          break
-        case 'members':
-          if (memberAnalytics) {
-            reportContent += `Total Members: ${memberAnalytics.totalMembers}\n`
-            reportContent += `Active: ${memberAnalytics.activeMembers}\n`
-            reportContent += `New This Month: ${memberAnalytics.newMembers}\n`
-            reportContent += `Suspended: ${memberAnalytics.suspendedMembers}\n`
-          }
-          break
-        case 'financial':
-          if (financialData) {
-            reportContent += `Total Contributions: ${financialData.totalContributions.toLocaleString()} RWF\n`
-            reportContent += `Total Loans: ${financialData.totalLoans.toLocaleString()} RWF\n`
-            reportContent += `Total Repayments: ${financialData.totalRepayments.toLocaleString()} RWF\n`
-            reportContent += `Outstanding Loans: ${financialData.outstandingLoans.toLocaleString()} RWF\n`
-          }
-          break
-        case 'compliance':
-          if (complianceData) {
-            reportContent += `Overall Score: ${complianceData.overallScore}%\n`
-            reportContent += `Compliant Groups: ${complianceData.groupsCompliant}\n`
-            reportContent += `At Risk Groups: ${complianceData.groupsAtRisk}\n`
-          }
-          break
-        case 'risk':
-          if (riskAnalysis) {
-            reportContent += `High Risk: ${riskAnalysis.highRiskGroups}\n`
-            reportContent += `Medium Risk: ${riskAnalysis.mediumRiskGroups}\n`
-            reportContent += `Low Risk: ${riskAnalysis.lowRiskGroups}\n`
-          }
-          break
-      }
-
-      const blob = new Blob([reportContent], { type: 'text/plain' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${selectedReport}-report-${new Date().toISOString().split('T')[0]}.txt`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      alert('Report generated successfully!')
-    } catch (err) {
-      console.error('Failed to generate report:', err)
-      alert('Failed to generate report')
-    }
-  }
-
-  const handleExportReport = async () => {
-    handleGenerateReport() // Same functionality
+    // Generate report is now the same as export
+    handleExportReport()
   }
 
   const handleShareReport = () => {
@@ -425,24 +348,135 @@ function AgentReports() {
                 <option value="yearly">Yearly</option>
               </select>
             </div>
-            <div>
+            <div className="flex-1">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Group Filter
               </label>
               <select
                 value={selectedGroup}
                 onChange={(e) => setSelectedGroup(e.target.value)}
-                className="input-field"
+                className="input-field w-full"
               >
-                {groups.map(group => (
-                  <option key={group.id} value={group.id}>{group.name}</option>
-                ))}
+                {groups.length === 0 ? (
+                  <option value="all">Loading groups...</option>
+                ) : (
+                  groups.map(group => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                      {group.code && ` (${group.code})`}
+                      {group.district && ` - ${group.district}`}
+                    </option>
+                  ))
+                )}
               </select>
+              {groups.length > 1 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {groups.length - 1} group{groups.length - 1 !== 1 ? 's' : ''} available
+                </p>
+              )}
             </div>
             <div className="flex items-end gap-2">
-              <button className="btn-primary flex items-center gap-2">
+              <button 
+                onClick={() => setShowCustomRange(!showCustomRange)}
+                className="btn-primary flex items-center gap-2"
+              >
                 <Calendar size={18} /> Custom Range
               </button>
+            </div>
+          </div>
+          
+          {showCustomRange && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      setCustomStartDate('')
+                      setCustomEndDate('')
+                      setShowCustomRange(false)
+                    }}
+                    className="btn-secondary px-4"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-600 mt-2">
+                When custom dates are set, they will override the date range dropdown above.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Summary Cards - Always Visible */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="card">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Total Contributions</p>
+                <p className="text-2xl font-bold text-gray-800">
+                  {summary.totalContributions.toLocaleString()} RWF
+                </p>
+              </div>
+              <DollarSign className="text-green-600" size={32} />
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Total Loans</p>
+                <p className="text-2xl font-bold text-gray-800">
+                  {summary.totalLoans.toLocaleString()} RWF
+                </p>
+              </div>
+              <Building2 className="text-blue-600" size={32} />
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Total Members</p>
+                <p className="text-2xl font-bold text-gray-800">
+                  {summary.totalMembers}
+                </p>
+              </div>
+              <Users className="text-purple-600" size={32} />
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Avg Compliance</p>
+                <p className="text-2xl font-bold text-gray-800">
+                  {summary.avgCompliance}%
+                </p>
+              </div>
+              <BarChart3 className="text-yellow-600" size={32} />
             </div>
           </div>
         </div>
@@ -451,19 +485,29 @@ function AgentReports() {
         <div className="space-y-6">
           {loading ? (
             <div className="card">
-              <p className="text-center py-8 text-gray-500">Loading report data...</p>
+              <div className="text-center py-8">
+                <LoadingSpinner size="default" text="Loading report data..." />
+              </div>
             </div>
           ) : selectedReport === 'performance' && performanceData ? (
             <div className="space-y-6">
-              {/* Performance Summary */}
+              {/* Performance Trends */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="card">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm text-gray-600 mb-2">Total Contributions</p>
+                      <p className="text-sm text-gray-600 mb-2">Contributions Trend</p>
                       <p className="text-2xl font-bold text-gray-800">
                         {performanceData.trends.contributions.current.toLocaleString()} RWF
                       </p>
+                      {performanceData.trends.contributions.change !== 0 && (
+                        <div className="flex items-center gap-1 mt-1">
+                          {getTrendIcon(performanceData.trends.contributions.change)}
+                          <span className={`text-xs ${performanceData.trends.contributions.change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {Math.abs(performanceData.trends.contributions.change)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <DollarSign className="text-green-600" size={32} />
                   </div>
@@ -472,10 +516,18 @@ function AgentReports() {
                 <div className="card">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm text-gray-600 mb-2">Total Loans</p>
+                      <p className="text-sm text-gray-600 mb-2">Loans Trend</p>
                       <p className="text-2xl font-bold text-gray-800">
                         {performanceData.trends.loans.current.toLocaleString()} RWF
                       </p>
+                      {performanceData.trends.loans.change !== 0 && (
+                        <div className="flex items-center gap-1 mt-1">
+                          {getTrendIcon(performanceData.trends.loans.change)}
+                          <span className={`text-xs ${performanceData.trends.loans.change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {Math.abs(performanceData.trends.loans.change)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <Building2 className="text-blue-600" size={32} />
                   </div>
@@ -484,10 +536,18 @@ function AgentReports() {
                 <div className="card">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm text-gray-600 mb-2">Total Members</p>
+                      <p className="text-sm text-gray-600 mb-2">Members Trend</p>
                       <p className="text-2xl font-bold text-gray-800">
                         {performanceData.trends.members.current}
                       </p>
+                      {performanceData.trends.members.change !== 0 && (
+                        <div className="flex items-center gap-1 mt-1">
+                          {getTrendIcon(performanceData.trends.members.change)}
+                          <span className={`text-xs ${performanceData.trends.members.change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {Math.abs(performanceData.trends.members.change)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <Users className="text-purple-600" size={32} />
                   </div>
@@ -496,10 +556,18 @@ function AgentReports() {
                 <div className="card">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm text-gray-600 mb-2">Avg Compliance</p>
+                      <p className="text-sm text-gray-600 mb-2">Compliance Trend</p>
                       <p className="text-2xl font-bold text-gray-800">
                         {performanceData.trends.compliance.current}%
                       </p>
+                      {performanceData.trends.compliance.change !== 0 && (
+                        <div className="flex items-center gap-1 mt-1">
+                          {getTrendIcon(performanceData.trends.compliance.change)}
+                          <span className={`text-xs ${performanceData.trends.compliance.change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {Math.abs(performanceData.trends.compliance.change)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <BarChart3 className="text-orange-600" size={32} />
                   </div>
@@ -704,15 +772,15 @@ function AgentReports() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="text-center p-4 bg-green-50 rounded-xl">
                     <p className="text-sm text-gray-600">Current Loans</p>
-                    <p className="text-2xl font-bold text-green-600">{financialData.loanPerformance.current}%</p>
+                    <p className="text-2xl font-bold text-green-600">{financialData.loanPerformance.current || 0}</p>
                   </div>
                   <div className="text-center p-4 bg-yellow-50 rounded-xl">
                     <p className="text-sm text-gray-600">Overdue Loans</p>
-                    <p className="text-2xl font-bold text-yellow-600">{financialData.loanPerformance.overdue}%</p>
+                    <p className="text-2xl font-bold text-yellow-600">{financialData.loanPerformance.overdue || 0}</p>
                   </div>
                   <div className="text-center p-4 bg-red-50 rounded-xl">
                     <p className="text-sm text-gray-600">Defaulted Loans</p>
-                    <p className="text-2xl font-bold text-red-600">{financialData.loanPerformance.defaulted}%</p>
+                    <p className="text-2xl font-bold text-red-600">{financialData.loanPerformance.defaulted || 0}</p>
                   </div>
                 </div>
               </div>

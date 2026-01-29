@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     type: {
-      type: DataTypes.ENUM('loan_approval', 'member_admission', 'fine_waiver', 'policy_change', 'withdrawal_approval', 'contribution_change', 'fine_change', 'other'),
+      type: DataTypes.ENUM('loan_approval', 'loan_approval_override', 'member_admission', 'fine_waiver', 'policy_change', 'withdrawal_approval', 'contribution_change', 'saving_amount_change', 'fine_change', 'fine_amount_change', 'interest_rate_change', 'other'),
       allowNull: false
     },
     status: {

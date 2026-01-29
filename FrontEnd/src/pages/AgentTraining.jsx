@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { BookOpen, Users, Video, FileText, MessageCircle, Calendar, Plus, Eye, Download, Play, CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function AgentTraining() {
+  const { t } = useTranslation('common')
+  const { t: tAgent } = useTranslation('agent')
   const [selectedTab, setSelectedTab] = useState('materials')
-  const [showCreateTraining, setShowCreateTraining] = useState(false)
   const [selectedTraining, setSelectedTraining] = useState(null)
   const [showTrainingDetails, setShowTrainingDetails] = useState(false)
   const [trainingMaterials, setTrainingMaterials] = useState([])
@@ -14,21 +16,29 @@ function AgentTraining() {
   const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Fetch training materials from database
+  const [trainingProgress, setTrainingProgress] = useState(null)
+  const [myRank, setMyRank] = useState(null)
+  const [rankings, setRankings] = useState([])
+
+  // Fetch training materials from database (only for agents)
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
         setLoading(true)
-        // Fetch published training content
-        const { data } = await api.get('/learn-grow?status=published')
-        if (mounted) {
-          setTrainingMaterials(data?.data || [])
+        // Fetch agent training progress with rankings
+        const { data } = await api.get('/learn-grow/agent/progress')
+        if (mounted && data?.success) {
+          setTrainingMaterials(data.data.trainings || [])
+          setTrainingProgress(data.data)
+          setMyRank(data.data.myRank)
+          setRankings(data.data.rankings || [])
         }
       } catch (err) {
         console.error('Failed to fetch training materials:', err)
         if (mounted) {
           setTrainingMaterials([])
+          setTrainingProgress(null)
         }
       } finally {
         if (mounted) setLoading(false)
@@ -77,17 +87,6 @@ function AgentTraining() {
 
   // Training sessions - no backend endpoint yet, so keep empty for now
 
-  const [newTraining, setNewTraining] = useState({
-    title: '',
-    type: 'live',
-    date: '',
-    time: '',
-    duration: '',
-    maxParticipants: '',
-    description: '',
-    location: '',
-    groupId: ''
-  })
 
   const getTypeIcon = (type) => {
     switch (type?.toLowerCase()) {
@@ -131,36 +130,45 @@ function AgentTraining() {
     }
   }
 
-  const handleCreateTraining = async () => {
-    if (!newTraining.title || !newTraining.date || !newTraining.description) {
-      alert('Please fill in all required fields.')
-      return
-    }
-    try {
-      // Note: Training sessions endpoint doesn't exist yet, so we'll just show a message
-      console.log('Creating training session:', newTraining)
-      alert('Training session scheduling is not yet available. Please contact system admin.')
-      setShowCreateTraining(false)
-      setNewTraining({
-        title: '',
-        type: 'live',
-        date: '',
-        time: '',
-        duration: '',
-        maxParticipants: '',
-        description: '',
-        location: '',
-        groupId: ''
-      })
-    } catch (err) {
-      console.error('Failed to create training session:', err)
-      alert(err?.response?.data?.message || 'Failed to create training session')
-    }
-  }
 
-  const handleViewTrainingDetails = (training) => {
+  const handleViewTrainingDetails = async (training) => {
     setSelectedTraining(training)
     setShowTrainingDetails(true)
+    
+    // Mark as in_progress if not started
+    if (training.progress?.status === 'not_started') {
+      try {
+        await api.post('/learn-grow/progress', {
+          contentId: training.id,
+          status: 'in_progress',
+          progressPercentage: 0
+        })
+      } catch (err) {
+        console.error('Failed to update progress:', err)
+      }
+    }
+  }
+  
+  const handleCompleteTraining = async (trainingId) => {
+    try {
+      await api.post('/learn-grow/progress', {
+        contentId: trainingId,
+        status: 'completed',
+        progressPercentage: 100
+      })
+      // Refresh training list
+      const { data } = await api.get('/learn-grow/agent/progress')
+      if (data?.success) {
+        setTrainingMaterials(data.data.trainings || [])
+        setTrainingProgress(data.data)
+        setMyRank(data.data.myRank)
+        setRankings(data.data.rankings || [])
+      }
+      alert('Training marked as completed!')
+    } catch (err) {
+      console.error('Failed to complete training:', err)
+      alert('Failed to mark training as completed')
+    }
   }
 
   const handleDownloadMaterial = async (material) => {
@@ -176,10 +184,6 @@ function AgentTraining() {
     }
   }
 
-  const handleUploadMaterial = () => {
-    console.log('Uploading new material...')
-    alert('Material upload dialog would open here')
-  }
 
   const handleResolveSupport = async (requestId) => {
     try {
@@ -204,18 +208,13 @@ function AgentTraining() {
             <p className="text-gray-600 mt-1">Provide training and support to groups and members</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowCreateTraining(true)}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus size={18} /> Create Training
-            </button>
-            <button
-              onClick={handleUploadMaterial}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <FileText size={18} /> Upload Material
-            </button>
+            {myRank && (
+              <div className="bg-primary-50 px-4 py-2 rounded-lg flex items-center gap-2">
+                <span className="text-sm font-semibold text-primary-700">
+                  My Rank: #{myRank} | Completed: {trainingProgress?.myCompletedCount || 0}/{trainingProgress?.totalTrainings || 0}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -224,7 +223,7 @@ function AgentTraining() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Training Materials</p>
+                <p className="text-sm text-gray-600 mb-2">Available Trainings</p>
                 <p className="text-2xl font-bold text-gray-800">{trainingMaterials.length}</p>
               </div>
               <BookOpen className="text-blue-600" size={32} />
@@ -234,12 +233,12 @@ function AgentTraining() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Scheduled Sessions</p>
+                <p className="text-sm text-gray-600 mb-2">Completed Trainings</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {trainingSessions.filter(s => s.status === 'scheduled').length}
+                  {trainingProgress?.myCompletedCount || 0}
                 </p>
               </div>
-              <Calendar className="text-green-600" size={32} />
+              <CheckCircle className="text-green-600" size={32} />
             </div>
           </div>
 
@@ -258,9 +257,9 @@ function AgentTraining() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Groups</p>
+                <p className="text-sm text-gray-600 mb-2">My Ranking</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {groups.length}
+                  #{myRank || 'N/A'}
                 </p>
               </div>
               <Users className="text-purple-600" size={32} />
@@ -292,64 +291,92 @@ function AgentTraining() {
             {selectedTab === 'materials' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-800">Training Materials</h2>
-                  <button
-                    onClick={handleUploadMaterial}
-                    className="btn-primary flex items-center gap-2"
-                  >
-                    <Plus size={18} /> Upload New Material
-                  </button>
+                  <h2 className="text-xl font-bold text-gray-800">Available Trainings</h2>
+                  {rankings.length > 0 && (
+                    <div className="text-sm text-gray-600">
+                      Top Performers: {rankings.slice(0, 3).map((r, i) => (
+                        <span key={r.agentId} className="ml-2">
+                          #{r.rank} {r.agentName} ({r.completedCount})
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {loading ? (
                   <div className="text-center py-8 text-gray-500">Loading training materials...</div>
                 ) : trainingMaterials.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    No training materials available. Training content will appear here once posted by the System Admin.
+                    No training materials available. Training content will appear here once posted by the System Admin for agents.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {trainingMaterials.map((material) => (
-                    <div
-                      key={material.id}
-                      className="card hover:shadow-xl transition-shadow"
-                    >
-                      <div className="aspect-video bg-gray-200 rounded-lg mb-4 flex items-center justify-center">
-                        {getTypeIcon(material.type)}
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <h3 className="font-bold text-gray-800">{material.title}</h3>
-                          <p className="text-sm text-gray-600">{material.description}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getLevelColor(material.category)}`}>
-                            {material.category || 'General'}
-                          </span>
-                          {material.duration && <span className="text-xs text-gray-500">{material.duration} min</span>}
-                        </div>
-                        <div className="flex items-center justify-between text-sm text-gray-600">
-                          <span>{material.views || 0} views</span>
-                        </div>
-                        <div className="flex gap-2">
-                          {material.fileUrl && (
-                            <button
-                              onClick={() => handleDownloadMaterial(material)}
-                              className="btn-primary flex-1 text-sm py-2 flex items-center justify-center gap-2"
-                            >
-                              <Download size={16} /> Download
-                            </button>
+                    {trainingMaterials.map((material) => {
+                      const progress = material.progress || { status: 'not_started', progressPercentage: 0, timeSpent: 0 }
+                      const isCompleted = progress.status === 'completed'
+                      const isInProgress = progress.status === 'in_progress'
+                      
+                      return (
+                      <div
+                        key={material.id}
+                        className={`card hover:shadow-xl transition-shadow ${isCompleted ? 'border-2 border-green-500' : ''}`}
+                      >
+                        <div className="aspect-video bg-gray-200 rounded-lg mb-4 flex items-center justify-center relative">
+                          {getTypeIcon(material.type)}
+                          {isCompleted && (
+                            <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+                              <CheckCircle size={12} /> Completed
+                            </div>
                           )}
-                          <button 
-                            onClick={() => handleViewTrainingDetails(material)}
-                            className="btn-secondary text-sm py-2 px-3 flex items-center gap-2"
-                          >
-                            <Eye size={16} />
-                          </button>
+                          {isInProgress && (
+                            <div className="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+                              <Clock size={12} /> In Progress
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <h3 className="font-bold text-gray-800">{material.title}</h3>
+                            <p className="text-sm text-gray-600">{material.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getLevelColor(material.category)}`}>
+                              {material.category || 'General'}
+                            </span>
+                            {material.duration && <span className="text-xs text-gray-500">{material.duration} min</span>}
+                          </div>
+                          {isInProgress && (
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-500 h-2 rounded-full" 
+                                style={{ width: `${progress.progressPercentage}%` }}
+                              ></div>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between text-sm text-gray-600">
+                            <span>{material.views || 0} views</span>
+                            {progress.timeSpent > 0 && <span>{progress.timeSpent} min spent</span>}
+                          </div>
+                          <div className="flex gap-2">
+                            {material.fileUrl && (
+                              <button
+                                onClick={() => handleDownloadMaterial(material)}
+                                className="btn-primary flex-1 text-sm py-2 flex items-center justify-center gap-2"
+                              >
+                                <Download size={16} /> {isCompleted ? 'Review' : 'Start'}
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => handleViewTrainingDetails(material)}
+                              className="btn-secondary text-sm py-2 px-3 flex items-center gap-2"
+                            >
+                              <Eye size={16} />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -358,66 +385,48 @@ function AgentTraining() {
             {selectedTab === 'sessions' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-800">Training Sessions</h2>
-                  <button
-                    onClick={() => setShowCreateTraining(true)}
-                    className="btn-primary flex items-center gap-2"
-                  >
-                    <Plus size={18} /> Schedule Session
-                  </button>
+                  <h2 className="text-xl font-bold text-gray-800">Agent Rankings</h2>
                 </div>
 
-                {trainingSessions.length === 0 ? (
+                {rankings.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    No training sessions scheduled. Training sessions will appear here once created.
+                    No rankings available yet. Complete trainings to appear on the leaderboard.
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {trainingSessions.map((session) => (
+                    {rankings.map((agent) => (
                     <div
-                      key={session.id}
-                      className="p-4 bg-gray-50 rounded-xl hover:bg-white transition-colors"
+                      key={agent.agentId}
+                      className={`p-4 rounded-xl transition-colors ${
+                        agent.agentId === trainingProgress?.myRank ? 'bg-primary-50 border-2 border-primary-500' : 'bg-gray-50 hover:bg-white'
+                      }`}
                     >
-                      <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center text-white font-bold">
-                            {getTypeIcon(session.type)}
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold ${
+                            agent.rank === 1 ? 'bg-yellow-500' : 
+                            agent.rank === 2 ? 'bg-gray-400' : 
+                            agent.rank === 3 ? 'bg-orange-500' : 
+                            'bg-primary-500'
+                          }`}>
+                            #{agent.rank}
                           </div>
                           <div>
-                            <h3 className="font-bold text-gray-800">{session.title}</h3>
-                            <p className="text-sm text-gray-600">{session.description}</p>
-                            <p className="text-sm text-gray-500">
-                              {session.date} at {session.time} • {session.duration} • {session.location}
+                            <h3 className="font-bold text-gray-800">
+                              {agent.agentName}
+                              {agent.agentId === trainingProgress?.myRank && (
+                                <span className="ml-2 text-primary-600 text-sm">(You)</span>
+                              )}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              Completed {agent.completedCount} out of {agent.totalTrainings} trainings
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(session.status)}`}>
-                            {session.status}
-                          </span>
-                          <span className="text-sm text-gray-600">
-                            {session.participants}/{session.maxParticipants} participants
-                          </span>
+                        <div className="text-right">
+                          <span className="text-2xl font-bold text-primary-600">{agent.completedCount}</span>
+                          <p className="text-xs text-gray-500">completed</p>
                         </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleViewTrainingDetails(session)}
-                          className="btn-primary text-sm px-4 py-2 flex items-center gap-2"
-                        >
-                          <Eye size={16} /> View Details
-                        </button>
-                        {session.status === 'scheduled' && (
-                          <button className="btn-secondary text-sm px-4 py-2 flex items-center gap-2">
-                            <Calendar size={16} /> Edit Session
-                          </button>
-                        )}
-                        {session.status === 'completed' && (
-                          <button className="btn-secondary text-sm px-4 py-2 flex items-center gap-2">
-                            <FileText size={16} /> View Report
-                          </button>
-                        )}
                       </div>
                     </div>
                     ))}
@@ -491,155 +500,6 @@ function AgentTraining() {
           </div>
         </div>
 
-        {/* Create Training Modal */}
-        {showCreateTraining && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-800">Schedule Training Session</h2>
-                <button
-                  onClick={() => setShowCreateTraining(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <XCircle size={24} />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Training Title
-                    </label>
-                    <input
-                      type="text"
-                      value={newTraining.title}
-                      onChange={(e) => setNewTraining({ ...newTraining, title: e.target.value })}
-                      className="input-field"
-                      placeholder="Enter training title..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Training Type
-                    </label>
-                    <select
-                      value={newTraining.type}
-                      onChange={(e) => setNewTraining({ ...newTraining, type: e.target.value })}
-                      className="input-field"
-                    >
-                      <option value="live">Live Session</option>
-                      <option value="online">Online Session</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Date
-                    </label>
-                    <input
-                      type="date"
-                      value={newTraining.date}
-                      onChange={(e) => setNewTraining({ ...newTraining, date: e.target.value })}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Time
-                    </label>
-                    <input
-                      type="time"
-                      value={newTraining.time}
-                      onChange={(e) => setNewTraining({ ...newTraining, time: e.target.value })}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Duration
-                    </label>
-                    <input
-                      type="text"
-                      value={newTraining.duration}
-                      onChange={(e) => setNewTraining({ ...newTraining, duration: e.target.value })}
-                      className="input-field"
-                      placeholder="e.g., 2 hours"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Max Participants
-                    </label>
-                    <input
-                      type="number"
-                      value={newTraining.maxParticipants}
-                      onChange={(e) => setNewTraining({ ...newTraining, maxParticipants: e.target.value })}
-                      className="input-field"
-                      placeholder="20"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Location
-                    </label>
-                    <input
-                      type="text"
-                      value={newTraining.location}
-                      onChange={(e) => setNewTraining({ ...newTraining, location: e.target.value })}
-                      className="input-field"
-                      placeholder="Enter location..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Target Group
-                    </label>
-                    <select
-                      value={newTraining.groupId}
-                      onChange={(e) => setNewTraining({ ...newTraining, groupId: e.target.value })}
-                      className="input-field"
-                    >
-                      <option value="">All Groups</option>
-                      {groups.map(group => (
-                        <option key={group.id} value={group.id}>{group.name}</option>
-                      ))}
-                    </select>
-                    {groups.length === 0 && (
-                      <p className="text-sm text-gray-500 mt-1">No groups available. Groups will appear here once registered.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    value={newTraining.description}
-                    onChange={(e) => setNewTraining({ ...newTraining, description: e.target.value })}
-                    className="input-field h-24 resize-none"
-                    placeholder="Enter training description..."
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={() => setShowCreateTraining(false)}
-                    className="btn-secondary flex-1"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateTraining}
-                    className="btn-primary flex-1"
-                  >
-                    Schedule Training
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Training Details Modal */}
         {showTrainingDetails && selectedTraining && (
@@ -710,9 +570,17 @@ function AgentTraining() {
                   >
                     Close
                   </button>
-                  <button className="btn-primary flex-1">
-                    Edit Session
-                  </button>
+                  {selectedTraining && selectedTraining.progress?.status !== 'completed' && (
+                    <button 
+                      onClick={() => {
+                        handleCompleteTraining(selectedTraining.id)
+                        setShowTrainingDetails(false)
+                      }}
+                      className="btn-primary flex-1"
+                    >
+                      Mark as Completed
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

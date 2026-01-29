@@ -2,11 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 import { Users, Calendar, MessageCircle, FileText, DollarSign, TrendingUp, MapPin, Clock, CheckCircle, AlertCircle, Building2, RefreshCw, Send } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api, { getAuthToken } from '../utils/api'
 import { io } from 'socket.io-client'
 
 function MemberGroup() {
   const navigate = useNavigate()
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
   const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(true)
   const [groupData, setGroupData] = useState(null)
@@ -105,7 +108,7 @@ function MemberGroup() {
 
   const handleMessageLeader = (leader) => {
     if (!leader || !leader.id) {
-      alert('Leader information not available')
+      alert(t('leaderInfoNotAvailable', { defaultValue: 'Leader information not available' }))
       return
     }
     // Navigate directly to chat page with the specific leader selected
@@ -114,12 +117,12 @@ function MemberGroup() {
 
   const handleSendMessage = async () => {
     if (!messageText.trim()) {
-      alert('Please enter a message')
+      alert(tCommon('enterMessage', { defaultValue: 'Please enter a message' }))
       return
     }
 
     if (!groupData || !groupData.groupInfo || !messageModal.leader) {
-      alert('Missing information to send message')
+      alert(t('missingInformationToSend', { defaultValue: 'Missing information to send message' }))
       return
     }
 
@@ -133,7 +136,7 @@ function MemberGroup() {
       })
 
       if (response.data?.success) {
-        alert('Private message sent successfully!')
+        alert(t('privateMessageSent', { defaultValue: 'Private message sent successfully!' }))
         setMessageText('')
         setMessageModal({ open: false, leader: null })
         // Navigate to private chat with the leader
@@ -149,7 +152,7 @@ function MemberGroup() {
 
   const handleMessageAllLeaders = () => {
     if (!groupData || !groupData.leaders) {
-      alert('No leaders available')
+      alert(t('noLeadersAvailable', { defaultValue: 'No leaders available' }))
       return
     }
 
@@ -160,7 +163,7 @@ function MemberGroup() {
     ].filter(Boolean)
 
     if (activeLeaders.length === 0) {
-      alert('No active leaders available to message')
+      alert(t('noActiveLeadersAvailable', { defaultValue: 'No active leaders available to message' }))
       return
     }
 
@@ -194,7 +197,7 @@ function MemberGroup() {
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <RefreshCw className="mx-auto mb-4 animate-spin text-primary-600" size={48} />
-            <p className="text-gray-600">Loading group data...</p>
+            <p className="text-gray-600">{tCommon('loadingGroupData', { defaultValue: 'Loading group data...' })}</p>
           </div>
         </div>
       </Layout>
@@ -224,7 +227,7 @@ function MemberGroup() {
         {/* Header */}
         <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">My Group</h1>
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('myGroup', { defaultValue: 'My Group' })}</h1>
           <p className="text-gray-600 mt-1">Group: {groupInfo.name}</p>
           </div>
           <button
@@ -468,7 +471,7 @@ function MemberGroup() {
                             </span>
                           </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{member.totalSavings.toLocaleString()} RWF</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{member.creditScore}/1000</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{member.creditScore}/100</td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                             <button
                                 onClick={() => navigate(`/chat?groupId=${groupInfo.id}&userId=${member.id}`)}

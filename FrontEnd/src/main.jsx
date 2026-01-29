@@ -1,4 +1,4 @@
-// Polyfill for global (required by simple-peer and other Node.js packages)
+// Polyfill for global
 if (typeof global === 'undefined') {
   var global = globalThis
 }

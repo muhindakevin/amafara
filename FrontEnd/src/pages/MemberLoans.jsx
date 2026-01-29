@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react'
 import { DollarSign, Plus, Clock, CheckCircle, AlertCircle, Download, Filter, Search, TrendingUp } from 'lucide-react'
 import Layout from '../components/Layout'
 import LoanRequestModal from '../components/modals/LoanRequestModal'
+import LoanPaymentModal from '../components/modals/LoanPaymentModal'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function MemberLoans() {
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
   const [showLoanModal, setShowLoanModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedLoan, setSelectedLoan] = useState(null)
 
   const [loanData, setLoanData] = useState({ totalBorrowed: 0, activeLoans: 0, totalRepaid: 0, creditScore: 0, eligibleAmount: 0 })
@@ -32,19 +37,23 @@ function MemberLoans() {
       }
       if (loansRes.data?.success) {
         const list = loansRes.data.data || []
+        // Include 'approved' status in active loans so members can see approved loans
         const active = list.filter(l => ['active','approved','disbursed', 'pending'].includes(l.status))
         const history = list.filter(l => l.status === 'completed' || l.status === 'rejected')
         setActiveLoans(active.map(l => ({
           id: l.id,
           amount: Number(l.amount || 0),
           purpose: l.purpose || 'Loan',
-          status: l.status,
+          status: l.status, // This will show 'approved' status
           monthlyPayment: Number(l.monthlyPayment || 0),
           remainingBalance: Number(l.remainingAmount || l.remainingBalance || 0),
-          nextPayment: l.nextPaymentDate || '',
+          remainingAmount: Number(l.remainingAmount || l.remainingBalance || 0),
+          paidAmount: Number(l.paidAmount || 0),
+          nextPayment: l.nextPaymentDate ? new Date(l.nextPaymentDate).toLocaleDateString() : '',
           interestRate: l.interestRate ? `${l.interestRate}%` : '-',
           duration: l.duration ? `${l.duration} months` : '-',
-          startDate: l.requestDate || l.createdAt || ''
+          startDate: l.requestDate || l.createdAt || '',
+          approvalDate: l.approvalDate || ''
         })))
         setLoanHistory(history.map(l => ({
           id: l.id,
@@ -109,14 +118,14 @@ function MemberLoans() {
       })
       
       if (response.data?.success) {
-        alert('Loan request submitted successfully! Group Admin, Secretary, and Cashier have been notified and will review your request. All group members have been informed.')
+        alert(t('loanRequestSubmitted', { defaultValue: 'Loan request submitted successfully! Group Admin, Secretary, and Cashier have been notified and will review your request. All group members have been informed.' }))
         setShowLoanModal(false)
         
         // Refresh loans data
         await refreshLoans()
       }
     } catch (e) {
-      const errorMessage = e.response?.data?.message || 'Failed to submit request'
+      const errorMessage = e.response?.data?.message || t('failedToSubmitRequest', { defaultValue: 'Failed to submit request' })
       alert(errorMessage)
       throw e // Re-throw so modal can handle it
     }
@@ -128,14 +137,14 @@ function MemberLoans() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">My Loans</h1>
-            <p className="text-gray-600 mt-1">Manage your loan applications and repayments</p>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('myLoans')}</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">{t('manageLoanApplications', { defaultValue: 'Manage your loan applications and repayments' })}</p>
           </div>
           <button
             onClick={() => setShowLoanModal(true)}
             className="btn-primary flex items-center gap-2"
           >
-            <Plus size={18} /> Request New Loan
+            <Plus size={18} /> {t('requestNewLoan', { defaultValue: 'Request New Loan' })}
           </button>
         </div>
 
@@ -144,8 +153,8 @@ function MemberLoans() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Borrowed</p>
-                <p className="text-2xl font-bold text-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalBorrowed', { defaultValue: 'Total Borrowed' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
                   {loanData.totalBorrowed.toLocaleString()} RWF
                 </p>
               </div>
@@ -156,8 +165,8 @@ function MemberLoans() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Active Loans</p>
-                <p className="text-2xl font-bold text-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('activeLoans')}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
                   {loanData.activeLoans}
                 </p>
               </div>
@@ -168,8 +177,8 @@ function MemberLoans() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Repaid</p>
-                <p className="text-2xl font-bold text-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalRepaid', { defaultValue: 'Total Repaid' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
                   {loanData.totalRepaid.toLocaleString()} RWF
                 </p>
               </div>
@@ -180,9 +189,9 @@ function MemberLoans() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Credit Score</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {loanData.creditScore}/1000
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('creditScore')}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {loanData.creditScore}/100
                 </p>
               </div>
               <TrendingUp className="text-purple-600" size={32} />
@@ -192,24 +201,24 @@ function MemberLoans() {
 
         {/* AI Recommendation */}
         <div className="card bg-gradient-to-r from-primary-50 to-blue-50 border-2 border-primary-200">
-          <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-            🤖 AI Loan Recommendation
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+            🤖 {t('aiLoanRecommendation', { defaultValue: 'AI Loan Recommendation' })}
           </h2>
-          <p className="text-gray-700 mb-4">
-            Based on your excellent payment history and credit score, you're eligible for a loan of up to{' '}
+          <p className="text-gray-700 dark:text-gray-300 mb-4">
+            {t('eligibleForLoanUpTo', { defaultValue: "Based on your excellent payment history and credit score, you're eligible for a loan of up to" })}{' '}
             <span className="font-bold text-primary-600">{loanData.eligibleAmount.toLocaleString()} RWF</span>
           </p>
           <button
             onClick={() => setShowLoanModal(true)}
             className="btn-primary text-sm"
           >
-            Apply for Recommended Loan
+            {t('applyForRecommendedLoan', { defaultValue: 'Apply for Recommended Loan' })}
           </button>
         </div>
 
         {/* Active Loans */}
         <div className="card">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Active Loans</h2>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">{t('activeLoans')}</h2>
           {activeLoans.length > 0 ? (
             <div className="space-y-4">
               {activeLoans.map((loan) => (
@@ -229,29 +238,44 @@ function MemberLoans() {
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-600">Monthly Payment</p>
-                      <p className="font-semibold">{loan.monthlyPayment.toLocaleString()} RWF</p>
+                      <p className="text-gray-600 dark:text-gray-400">{t('monthlyPayment')}</p>
+                      <p className="font-semibold dark:text-white">{loan.monthlyPayment.toLocaleString()} RWF</p>
                     </div>
                     <div>
-                      <p className="text-gray-600">Remaining Balance</p>
-                      <p className="font-semibold">{loan.remainingBalance.toLocaleString()} RWF</p>
+                      <p className="text-gray-600 dark:text-gray-400">{t('remainingBalance', { defaultValue: 'Remaining Balance' })}</p>
+                      <p className={`font-semibold ${loan.remainingBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {loan.remainingBalance.toLocaleString()} RWF
+                        {loan.remainingBalance <= 0 && ` (${tCommon('paid', { defaultValue: 'Paid' })})`}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-gray-600">Next Payment</p>
-                      <p className="font-semibold">{loan.nextPayment}</p>
+                      <p className="text-gray-600 dark:text-gray-400">{t('nextPayment', { defaultValue: 'Next Payment' })}</p>
+                      <p className="font-semibold dark:text-white">{loan.nextPayment || tCommon('nA', { defaultValue: 'N/A' })}</p>
                     </div>
                     <div>
-                      <p className="text-gray-600">Interest Rate</p>
-                      <p className="font-semibold">{loan.interestRate}</p>
+                      <p className="text-gray-600 dark:text-gray-400">{t('interestRate', { defaultValue: 'Interest Rate' })}</p>
+                      <p className="font-semibold dark:text-white">{loan.interestRate}</p>
                     </div>
                   </div>
                   
                   <div className="mt-3 flex gap-2">
-                    <button className="btn-primary text-sm px-4 py-2">
-                      Make Payment
-                    </button>
+                    {loan.status === 'active' || loan.status === 'disbursed' || loan.status === 'approved' ? (
+                      <button
+                        onClick={() => {
+                          setSelectedLoan(loan)
+                          setShowPaymentModal(true)
+                        }}
+                        className="btn-primary text-sm px-4 py-2"
+                      >
+                        {t('makePayment', { defaultValue: 'Make Payment' })}
+                      </button>
+                    ) : loan.status === 'completed' ? (
+                      <span className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold">
+                        {t('fullyPaid', { defaultValue: 'Fully Paid' })}
+                      </span>
+                    ) : null}
                     <button className="btn-secondary text-sm px-4 py-2">
-                      View Details
+                      {tCommon('viewDetails', { defaultValue: 'View Details' })}
                     </button>
                   </div>
                 </div>
@@ -260,7 +284,7 @@ function MemberLoans() {
           ) : (
             <div className="text-center py-8 text-gray-500">
               <DollarSign className="mx-auto mb-4" size={48} />
-              <p>No active loans</p>
+              <p className="dark:text-gray-400">{t('noActiveLoans', { defaultValue: 'No active loans' })}</p>
             </div>
           )}
         </div>
@@ -268,7 +292,7 @@ function MemberLoans() {
         {/* Loan History */}
         <div className="card">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800">Loan History</h2>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-white">{t('loanHistory', { defaultValue: 'Loan History' })}</h2>
             <div className="flex gap-2">
               <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <Search size={18} />
@@ -318,6 +342,20 @@ function MemberLoans() {
         <LoanRequestModal
           onClose={() => setShowLoanModal(false)}
           onConfirm={handleLoanRequest}
+        />
+      )}
+
+      {/* Loan Payment Modal */}
+      {showPaymentModal && selectedLoan && (
+        <LoanPaymentModal
+          loan={selectedLoan}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setSelectedLoan(null)
+          }}
+          onSuccess={() => {
+            refreshLoans()
+          }}
         />
       )}
     </Layout>

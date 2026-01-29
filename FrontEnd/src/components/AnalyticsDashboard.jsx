@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { TrendingUp, Users, DollarSign, Clock, AlertCircle, CheckCircle } from 'lucide-react'
-import { getTranslation } from '../utils/translations'
-import { useLanguage } from '../contexts/LanguageContext'
+import { useTranslation } from 'react-i18next'
 
 function AnalyticsDashboard() {
-  const { language } = useLanguage()
+  const { t } = useTranslation('dashboard')
   const [selectedPeriod, setSelectedPeriod] = useState('6months')
 
   const contributionData = [

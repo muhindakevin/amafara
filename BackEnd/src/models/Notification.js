@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM(
         'otp', 'registration', 'loan_approval', 'loan_rejection', 
         'contribution_confirmation', 'fine_issued', 'meeting_reminder',
-        'announcement', 'vote_created', 'learn_grow_update', 'general'
+        'announcement', 'vote_created', 'learn_grow_update', 'chat_message', 'general', 'agent_action'
       ),
       allowNull: false
     },

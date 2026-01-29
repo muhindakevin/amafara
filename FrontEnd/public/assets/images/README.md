@@ -1,6 +1,6 @@
 # Image Assets
 
-This directory should contain high-quality images for the UMURENGE WALLET landing page.
+This directory should contain high-quality images for the IKIMINA WALLET landing page.
 
 ## Required Images
 

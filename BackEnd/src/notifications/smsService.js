@@ -1,5 +1,21 @@
 const getTwilioClient = require('../../config/twilio');
-const { Notification } = require('../models');
+const { Notification, Setting } = require('../models');
+
+/**
+ * Check if SMS notifications are enabled
+ */
+const isSmsEnabled = async () => {
+  try {
+    const setting = await Setting.findOne({ where: { key: 'system_smsEnabled' } });
+    if (setting) {
+      return setting.value === 'true' || setting.value === true;
+    }
+    return true; // Default enabled
+  } catch (error) {
+    console.error('[isSmsEnabled] Error:', error);
+    return true; // Default enabled
+  }
+};
 
 /**
  * Send SMS via Twilio
@@ -10,6 +26,13 @@ const { Notification } = require('../models');
  */
 const sendSMS = async (to, message, userId = null, type = 'sms') => {
   try {
+    // Check if SMS is enabled
+    const enabled = await isSmsEnabled();
+    if (!enabled) {
+      console.warn(`⚠️  SMS not sent to ${to}: SMS notifications are disabled in system settings`);
+      return { success: false, message: 'SMS notifications are disabled' };
+    }
+
     const twilioClient = getTwilioClient();
     
     if (!twilioClient) {
@@ -75,7 +98,7 @@ const sendSMS = async (to, message, userId = null, type = 'sms') => {
  * Send OTP SMS
  */
 const sendOTP = async (phone, otp) => {
-  const message = `Your UMURENGE WALLET OTP code is: ${otp}. Valid for 10 minutes. Do not share this code.`;
+  const message = `Your IKIMINA WALLET OTP code is: ${otp}. Valid for 10 minutes. Do not share this code.`;
   return await sendSMS(phone, message, null, 'otp');
 };
 
@@ -83,7 +106,7 @@ const sendOTP = async (phone, otp) => {
  * Send registration confirmation SMS
  */
 const sendRegistrationConfirmation = async (phone, userName) => {
-  const message = `Welcome to UMURENGE WALLET, ${userName}! Your account has been successfully registered.`;
+  const message = `Welcome to IKIMINA WALLET, ${userName}! Your account has been successfully registered.`;
   return await sendSMS(phone, message, null, 'registration');
 };
 

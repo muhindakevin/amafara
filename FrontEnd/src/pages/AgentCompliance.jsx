@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Shield, AlertCircle, CheckCircle, Eye, BarChart3, TrendingUp, TrendingDown, Users, DollarSign, FileText, Download, Filter, Search, XCircle } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 function AgentCompliance() {
+  const { t } = useTranslation('common')
+  const { t: tAgent } = useTranslation('agent')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterRisk, setFilterRisk] = useState('all')
@@ -12,147 +16,130 @@ function AgentCompliance() {
   const [groups, setGroups] = useState([])
   const [violations, setViolations] = useState([])
   const [loading, setLoading] = useState(true)
-  const [auditLogs, setAuditLogs] = useState([])
+  const [summary, setSummary] = useState({
+    totalGroups: 0,
+    highRiskGroups: 0,
+    activeViolations: 0,
+    avgCompliance: 0
+  })
+  const [violationStartDate, setViolationStartDate] = useState('')
+  const [violationEndDate, setViolationEndDate] = useState('')
+  const [searchedGroups, setSearchedGroups] = useState([])
+  const [showSearchResults, setShowSearchResults] = useState(false)
 
-  useEffect(() => {
-    let mounted = true
-    async function loadData() {
+  // Load groups from database (like transfer page)
+  const loadGroupsFromDB = async (searchTerm = '') => {
+    try {
+      const params = { viewAll: 'true' }
+      if (searchTerm && searchTerm.trim()) {
+        params.search = searchTerm.trim()
+      }
+      console.log('[AgentCompliance] Fetching groups with params:', params)
+      const { data } = await api.get('/groups', { params })
+      if (data?.success) {
+        return data.data || []
+      }
+      return []
+    } catch (err) {
+      console.error('[AgentCompliance] Failed to load groups:', err)
+      return []
+    }
+  }
+
+  // Load compliance data for a specific group
+  const loadGroupCompliance = async (groupId) => {
       try {
         setLoading(true)
-        // Fetch groups, loans, contributions, transactions, and audit logs
-        const [groupsRes, loansRes, contributionsRes, transactionsRes, auditRes] = await Promise.all([
-          api.get('/groups'),
-          api.get('/loans').catch(() => ({ data: { success: false, data: [] } })),
-          api.get('/contributions').catch(() => ({ data: { success: false, data: [] } })),
-          api.get('/transactions').catch(() => ({ data: { success: false, data: [] } })),
-          api.get('/audit-logs?limit=1000').catch(() => ({ data: { success: false, data: [] } }))
-        ])
-
-        if (!mounted) return
-
-        const groupsData = groupsRes.data?.data || []
-        const loans = loansRes.data?.data || []
-        const contributions = contributionsRes.data?.data || []
-        const transactions = transactionsRes.data?.data || []
-        const audits = auditRes.data?.data || []
-        
-        setAuditLogs(audits)
-
-        // Calculate compliance metrics for each group
-        const groupsWithCompliance = await Promise.all(groupsData.map(async (group) => {
-          // Get group-specific data
-          const groupLoans = loans.filter(l => l.groupId === group.id)
-          const groupContributions = contributions.filter(c => c.groupId === group.id)
-          const groupTransactions = transactions.filter(t => t.groupId === group.id)
-          
-          // Calculate repayment rate
-          const paidLoans = groupLoans.filter(l => l.status === 'completed' || l.status === 'paid').length
-          const totalActiveLoans = groupLoans.filter(l => ['approved', 'disbursed', 'active'].includes(l.status)).length
-          const repaymentRate = totalActiveLoans > 0 ? Math.round((paidLoans / totalActiveLoans) * 100) : 100
-
-          // Calculate compliance score (based on repayment rate, active status, contributions regularity)
-          const overdueLoans = groupLoans.filter(l => l.status === 'overdue').length
-          const activeContributions = groupContributions.filter(c => c.status === 'completed').length
-          const pendingContributions = groupContributions.filter(c => c.status === 'pending').length
-          
-          let complianceScore = 100
-          if (overdueLoans > 0) complianceScore -= (overdueLoans * 5)
-          if (pendingContributions > activeContributions) complianceScore -= 10
-          if (group.status !== 'active') complianceScore -= 20
-          complianceScore = Math.max(0, Math.min(100, complianceScore))
-
-          // Determine risk level
-          let riskLevel = 'low'
-          if (complianceScore < 70) riskLevel = 'high'
-          else if (complianceScore < 85) riskLevel = 'medium'
-
-          // Count violations from audit logs (actions that might indicate issues)
-          const groupViolations = audits.filter(a => 
-            a.entityType === 'Loan' && 
-            a.action && 
-            (a.action.includes('OVERDUE') || a.action.includes('DEFAULT') || a.action.includes('VIOLATION'))
-          ).length
-
-          // Get last audit date
-          const groupAudits = audits.filter(a => a.entityType === 'Group' && a.entityId === group.id)
-          const lastAudit = groupAudits.length > 0 && groupAudits[0]?.createdAt
-            ? new Date(groupAudits.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0].createdAt).toISOString().split('T')[0]
-            : null
-
-          return {
-            id: group.id,
-            name: group.name,
-            district: group.district || 'N/A',
-            status: group.status || 'active',
-            complianceScore,
-            riskLevel,
-            totalMembers: group.totalMembers || 0,
-            totalContributions: Number(group.totalSavings || 0),
-            totalLoans: groupLoans.reduce((sum, l) => sum + Number(l.amount || 0), 0),
-            repaymentRate,
-            lastAudit: lastAudit || 'Never',
-            violations: groupViolations
-          }
-        }))
-
-        setGroups(groupsWithCompliance)
-
-        // Generate violations list from audit logs and overdue loans
-        const violationsList = []
-        groupsWithCompliance.forEach(group => {
-          if (group.violations > 0) {
-            violationsList.push({
-              id: `V${group.id}`,
-              groupId: group.id,
-              groupName: group.name,
-              type: 'Compliance Issue',
-              description: `${group.violations} compliance issues detected`,
-              severity: group.riskLevel === 'high' ? 'high' : group.riskLevel === 'medium' ? 'medium' : 'low',
-              date: group.lastAudit !== 'Never' ? group.lastAudit : new Date().toISOString().split('T')[0],
-              status: 'pending',
-              resolvedBy: null
-            })
-          }
-        })
-
-        // Add overdue loans as violations
-        loans.filter(l => l.status === 'overdue').forEach(loan => {
-          const group = groupsWithCompliance.find(g => g.id === loan.groupId)
-          if (group) {
-            violationsList.push({
-              id: `V-LOAN-${loan.id}`,
-              groupId: loan.groupId,
-              groupName: group.name,
-              type: 'Loan Overdue',
-              description: `Loan ID ${loan.id} is overdue. Amount: ${loan.amount} RWF`,
-              severity: 'medium',
-              date: loan.dueDate || new Date().toISOString().split('T')[0],
-              status: 'pending',
-              resolvedBy: null
-            })
-          }
-        })
-
-        setViolations(violationsList)
-      } catch (err) {
-        console.error('Failed to load compliance data:', err)
-      } finally {
-        if (mounted) setLoading(false)
+      const params = {}
+      
+      // Add status filter
+      if (filterStatus && filterStatus !== 'all') {
+        params.status = filterStatus
       }
-    }
-    loadData()
-    return () => { mounted = false }
-  }, [])
+      
+      // Add risk level filter
+      if (filterRisk && filterRisk !== 'all') {
+        params.riskLevel = filterRisk
+      }
 
-  const filteredGroups = groups.filter(group => {
-    const matchesStatus = filterStatus === 'all' || group.status === filterStatus
-    const matchesRisk = filterRisk === 'all' || group.riskLevel === filterRisk
-    const matchesSearch = 
-      group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      group.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      group.id.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesStatus && matchesRisk && matchesSearch
-  })
+      // Add date range for violations
+      if (violationStartDate) {
+        params.startDate = violationStartDate
+      }
+      if (violationEndDate) {
+        params.endDate = violationEndDate
+      }
+
+      // If a specific group is selected, we'll filter on the frontend
+      console.log('[AgentCompliance] Fetching compliance data with params:', params)
+      const { data } = await api.get('/agent/compliance/dashboard', { params })
+
+      if (data?.success) {
+        console.log('[AgentCompliance] Received data:', data.data)
+        const allGroups = data.data.groups || []
+        
+        // If a group is selected, filter to show only that group
+        const filteredGroups = groupId 
+          ? allGroups.filter(g => g.id.toString() === groupId.toString())
+          : allGroups
+
+        setSummary(data.data.summary || {
+          totalGroups: 0,
+          highRiskGroups: 0,
+          activeViolations: 0,
+          avgCompliance: 0
+        })
+        setGroups(filteredGroups)
+        setViolations(data.data.violations || [])
+      } else {
+        console.warn('[AgentCompliance] No success in response:', data)
+        setSummary({ totalGroups: 0, highRiskGroups: 0, activeViolations: 0, avgCompliance: 0 })
+        setGroups([])
+        setViolations([])
+      }
+    } catch (err) {
+      console.error('[AgentCompliance] Failed to load compliance data:', err)
+      setSummary({ totalGroups: 0, highRiskGroups: 0, activeViolations: 0, avgCompliance: 0 })
+      setGroups([])
+      setViolations([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle search button click (like transfer page)
+  const handleSearchGroups = async () => {
+    try {
+      const groupsList = await loadGroupsFromDB(searchTerm)
+      setSearchedGroups(groupsList)
+      setShowSearchResults(true)
+    } catch (err) {
+      console.error('Search failed:', err)
+      alert('Failed to search groups. Please try again.')
+    }
+  }
+
+  // Handle group selection from search results
+  const handleSelectGroup = (group) => {
+    setSelectedGroup(group)
+    setShowSearchResults(false)
+    setSearchTerm(group.name) // Show selected group name in search box
+    loadGroupCompliance(group.id) // Load compliance for selected group
+  }
+
+  // Load compliance data when filters change (but not when search term changes - that's handled by search button)
+  useEffect(() => {
+    if (!selectedGroup) {
+      // Only load if no group is selected
+      loadGroupCompliance(null)
+    } else {
+      // Reload compliance for selected group when filters change
+      loadGroupCompliance(selectedGroup.id)
+    }
+  }, [filterStatus, filterRisk, violationStartDate, violationEndDate])
+
+  // Groups are filtered by selected group or all groups
+  const filteredGroups = groups
 
   const getRiskColor = (risk) => {
     switch (risk) {
@@ -194,19 +181,26 @@ function AgentCompliance() {
 
   const handleGenerateComplianceReport = async () => {
     try {
-      // Generate comprehensive compliance report
-      let reportContent = 'UMURENGE WALLET - COMPLIANCE REPORT\n'
+      // Generate comprehensive compliance report based on current filters and search
+      let reportContent = 'IKIMINA WALLET - COMPLIANCE REPORT\n'
       reportContent += `Generated: ${new Date().toLocaleString()}\n`
-      reportContent += `Total Groups: ${groups.length}\n`
-      reportContent += `High Risk Groups: ${groups.filter(g => g.riskLevel === 'high').length}\n`
-      reportContent += `Active Violations: ${violations.filter(v => v.status !== 'resolved').length}\n`
-      reportContent += `Average Compliance Score: ${groups.length > 0 ? Math.round(groups.reduce((sum, g) => sum + g.complianceScore, 0) / groups.length) : 0}%\n\n`
+      reportContent += `Filters Applied:\n`
+      if (searchTerm) reportContent += `  Search: ${searchTerm}\n`
+      if (filterStatus !== 'all') reportContent += `  Status: ${filterStatus}\n`
+      if (filterRisk !== 'all') reportContent += `  Risk Level: ${filterRisk}\n`
+      reportContent += `\n`
+      reportContent += `Total Groups: ${summary.totalGroups}\n`
+      reportContent += `High Risk Groups: ${summary.highRiskGroups}\n`
+      reportContent += `Active Violations: ${summary.activeViolations}\n`
+      reportContent += `Average Compliance Score: ${summary.avgCompliance}%\n\n`
 
       reportContent += 'GROUP COMPLIANCE DETAILS\n'
       reportContent += '='.repeat(80) + '\n'
-      groups.forEach(group => {
+      filteredGroups.forEach(group => {
         reportContent += `\nGroup: ${group.name} (ID: ${group.id})\n`
+        if (group.code) reportContent += `  Code: ${group.code}\n`
         reportContent += `  District: ${group.district}\n`
+        if (group.sector) reportContent += `  Sector: ${group.sector}\n`
         reportContent += `  Status: ${group.status}\n`
         reportContent += `  Compliance Score: ${group.complianceScore}%\n`
         reportContent += `  Risk Level: ${group.riskLevel}\n`
@@ -220,7 +214,7 @@ function AgentCompliance() {
 
       reportContent += '\n\nACTIVE VIOLATIONS\n'
       reportContent += '='.repeat(80) + '\n'
-      violations.filter(v => v.status !== 'resolved').forEach(v => {
+      violations.forEach(v => {
         reportContent += `\nID: ${v.id}\n`
         reportContent += `  Group: ${v.groupName}\n`
         reportContent += `  Type: ${v.type}\n`
@@ -235,7 +229,9 @@ function AgentCompliance() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `compliance-report-${new Date().toISOString().split('T')[0]}.txt`
+      const dateStr = new Date().toISOString().split('T')[0]
+      const filterStr = searchTerm ? `-${searchTerm.substring(0, 10)}` : ''
+      a.download = `compliance-report-${dateStr}${filterStr}.txt`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -250,14 +246,32 @@ function AgentCompliance() {
 
   const handleExportViolations = async () => {
     try {
-      const activeViolations = violations.filter(v => v.status !== 'resolved')
+      // Export violations based on date range if specified
+      let violationsToExport = violations
       
-      let csvContent = 'UMURENGE WALLET - VIOLATIONS EXPORT\n'
+      if (violationStartDate || violationEndDate) {
+        violationsToExport = violations.filter(v => {
+          const violationDate = new Date(v.date)
+          if (violationStartDate && violationEndDate) {
+            return violationDate >= new Date(violationStartDate) && violationDate <= new Date(violationEndDate)
+          } else if (violationStartDate) {
+            return violationDate >= new Date(violationStartDate)
+          } else if (violationEndDate) {
+            return violationDate <= new Date(violationEndDate)
+          }
+          return true
+        })
+      }
+      
+      let csvContent = 'IKIMINA WALLET - VIOLATIONS EXPORT\n'
       csvContent += `Generated: ${new Date().toLocaleString()}\n`
-      csvContent += `Total Violations: ${activeViolations.length}\n\n`
+      if (violationStartDate || violationEndDate) {
+        csvContent += `Date Range: ${violationStartDate || 'All'} to ${violationEndDate || 'All'}\n`
+      }
+      csvContent += `Total Violations: ${violationsToExport.length}\n\n`
       csvContent += 'ID\tGroup Name\tType\tDescription\tSeverity\tDate\tStatus\n'
       
-      activeViolations.forEach(v => {
+      violationsToExport.forEach(v => {
         csvContent += `${v.id}\t${v.groupName}\t${v.type}\t${v.description}\t${v.severity}\t${v.date}\t${v.status}\n`
       })
 
@@ -265,13 +279,15 @@ function AgentCompliance() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `violations-export-${new Date().toISOString().split('T')[0]}.txt`
+      const dateStr = new Date().toISOString().split('T')[0]
+      const rangeStr = violationStartDate || violationEndDate ? `-${violationStartDate || 'start'}-${violationEndDate || 'end'}` : ''
+      a.download = `violations-export-${dateStr}${rangeStr}.txt`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
 
-      alert('Violations exported successfully!')
+      alert(`Violations exported successfully! (${violationsToExport.length} violations)`)
     } catch (err) {
       console.error('Failed to export violations:', err)
       alert('Failed to export violations')
@@ -324,7 +340,7 @@ function AgentCompliance() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-800">Monitoring & Compliance</h1>
-            <p className="text-gray-600 mt-1">Monitor group activities and ensure compliance with UMURENGE WALLET policies</p>
+            <p className="text-gray-600 mt-1">Monitor group activities and ensure compliance with IKIMINA WALLET policies</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -342,13 +358,58 @@ function AgentCompliance() {
           </div>
         </div>
 
+        {/* Date Range for Violations Export */}
+        <div className="card bg-blue-50 border border-blue-200">
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Export Violations Date Range (Optional)
+              </label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={violationStartDate}
+                    onChange={(e) => setViolationStartDate(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={violationEndDate}
+                    onChange={(e) => setViolationEndDate(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                {(violationStartDate || violationEndDate) && (
+                  <button
+                    onClick={() => {
+                      setViolationStartDate('')
+                      setViolationEndDate('')
+                    }}
+                    className="btn-secondary px-4"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Leave empty to export all violations. Set date range to filter violations by reported date.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Total Groups</p>
-                <p className="text-2xl font-bold text-gray-800">{groups.length}</p>
+                <p className="text-2xl font-bold text-gray-800">{summary.totalGroups}</p>
               </div>
               <Shield className="text-blue-600" size={32} />
             </div>
@@ -358,9 +419,7 @@ function AgentCompliance() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-2">High Risk Groups</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {groups.filter(g => g.riskLevel === 'high').length}
-                </p>
+                <p className="text-2xl font-bold text-red-600">{summary.highRiskGroups}</p>
               </div>
               <AlertCircle className="text-red-600" size={32} />
             </div>
@@ -370,9 +429,7 @@ function AgentCompliance() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Active Violations</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {violations.filter(v => v.status === 'pending' || v.status === 'investigating').length}
-                </p>
+                <p className="text-2xl font-bold text-yellow-600">{summary.activeViolations}</p>
               </div>
               <AlertCircle className="text-yellow-600" size={32} />
             </div>
@@ -382,9 +439,7 @@ function AgentCompliance() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Avg Compliance</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {groups.length > 0 ? Math.round(groups.reduce((sum, g) => sum + (g.complianceScore || 0), 0) / groups.length) : 0}%
-                </p>
+                <p className="text-2xl font-bold text-green-600">{summary.avgCompliance}%</p>
               </div>
               <CheckCircle className="text-green-600" size={32} />
             </div>
@@ -398,16 +453,118 @@ function AgentCompliance() {
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Search Groups
               </label>
-              <div className="relative">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, district, or ID..."
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSearchGroups()
+                      }
+                    }}
+                    placeholder="Search by name, district, code, or sector..."
                   className="input-field pl-10"
                 />
+                </div>
+                <button
+                  onClick={handleSearchGroups}
+                  className="btn-primary px-6 whitespace-nowrap"
+                >
+                  <Search size={18} className="mr-2" />
+                  Search
+                </button>
+                {selectedGroup && (
+                  <button
+                    onClick={() => {
+                      setSelectedGroup(null)
+                      setSearchTerm('')
+                      setShowSearchResults(false)
+                      loadGroupCompliance(null)
+                    }}
+                    className="btn-secondary px-4 whitespace-nowrap"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
+              
+              {/* Display search results as clickable items (like transfer page) */}
+              {showSearchResults && searchedGroups.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-gray-600 mb-3">
+                    Found {searchedGroups.length} group{searchedGroups.length !== 1 ? 's' : ''}
+                    {searchTerm && ` matching "${searchTerm}"`}
+                  </p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                    {searchedGroups.map(group => (
+                      <div
+                        key={group.id}
+                        onClick={() => handleSelectGroup(group)}
+                        className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                          selectedGroup && selectedGroup.id === group.id
+                            ? 'border-primary-500 bg-primary-50'
+                            : 'border-gray-200 bg-white hover:border-primary-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-gray-800">{group.name || 'Unknown Group'}</p>
+                            {group.code && (
+                              <p className="text-sm text-gray-600">Code: {group.code}</p>
+                            )}
+                            {group.district && (
+                              <p className="text-xs text-gray-500">District: {group.district}</p>
+                            )}
+                            {group.sector && (
+                              <p className="text-xs text-gray-500">Sector: {group.sector}</p>
+                            )}
+                          </div>
+                          {selectedGroup && selectedGroup.id === group.id && (
+                            <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
+                              <CheckCircle className="text-white" size={16} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {showSearchResults && searchedGroups.length === 0 && searchTerm && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    No groups found matching "{searchTerm}". Please try a different search term.
+                  </p>
+                </div>
+              )}
+
+              {selectedGroup && (
+                <div className="mt-4 p-3 bg-primary-50 border border-primary-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-primary-800">Selected Group: {selectedGroup.name}</p>
+                      {selectedGroup.code && (
+                        <p className="text-sm text-primary-600">Code: {selectedGroup.code}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedGroup(null)
+                        setSearchTerm('')
+                        setShowSearchResults(false)
+                        loadGroupCompliance(null)
+                      }}
+                      className="text-primary-600 hover:text-primary-800"
+                    >
+                      <XCircle size={20} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -455,7 +612,9 @@ function AgentCompliance() {
           </div>
 
           {loading ? (
-            <p className="text-center py-8 text-gray-500">Loading compliance data...</p>
+            <div className="text-center py-8">
+              <LoadingSpinner size="default" text="Loading compliance data..." />
+            </div>
           ) : filteredGroups.length === 0 ? (
             <p className="text-center py-8 text-gray-500">No groups found. Groups will appear here once they are registered.</p>
           ) : (

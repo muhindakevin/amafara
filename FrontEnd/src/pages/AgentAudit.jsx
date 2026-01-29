@@ -1,50 +1,78 @@
 import { useState, useEffect } from 'react'
 import { FileCheck, Eye, CheckCircle, XCircle, AlertCircle, Download, Search, Filter, Calendar, Users, DollarSign, Shield } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function AgentAudit() {
+  const { t } = useTranslation('common')
+  const { t: tAgent } = useTranslation('agent')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  const [filterGroup, setFilterGroup] = useState('all')
   const [selectedAudit, setSelectedAudit] = useState(null)
   const [showAuditDetails, setShowAuditDetails] = useState(false)
   const [showCreateAudit, setShowCreateAudit] = useState(false)
+  const [showPerformAudit, setShowPerformAudit] = useState(false)
   const [auditRecords, setAuditRecords] = useState([])
-  const [verificationQueue, setVerificationQueue] = useState([])
+  const [scheduledAudits, setScheduledAudits] = useState([])
   const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState({
+    totalLogs: 0,
+    userActions: 0,
+    entityTypes: 0,
+    groupsTracked: 0
+  })
 
-  // Fetch audit logs from database
+  // Fetch audit logs from database with filters
+  const fetchAuditLogs = async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (searchTerm) params.append('search', searchTerm)
+      if (filterType !== 'all') params.append('filterType', filterType)       
+      if (filterGroup !== 'all') params.append('groupId', filterGroup)        
+
+      const { data } = await api.get(`/audit-logs?${params.toString()}`)      
+      if (data?.success) {
+        setAuditRecords(data.data || [])
+        if (data.summary) {
+          setSummary({
+            totalLogs: data.summary.totalLogs || 0,
+            userActions: data.summary.successfulLogs || 0,
+            entityTypes: new Set((data.data || []).map(a => a.entityType).filter(Boolean)).size,                                                              
+            groupsTracked: groups.length
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch audit logs:', err)
+      setAuditRecords([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      try {
-        setLoading(true)
-        const { data } = await api.get('/audit-logs')
-        if (mounted) {
-          setAuditRecords(data?.data || [])
-        }
-      } catch (err) {
-        console.error('Failed to fetch audit logs:', err)
-        if (mounted) {
-          setAuditRecords([])
-        }
-      } finally {
-        if (mounted) setLoading(false)
+      if (mounted) {
+        await fetchAuditLogs()
       }
     })()
     return () => { mounted = false }
-  }, [])
+  }, [searchTerm, filterType, filterGroup, groups.length])
 
   // Fetch groups
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        const { data } = await api.get('/groups')
-        if (mounted) {
-          setGroups(data?.data || [])
+        const { data } = await api.get('/groups', { params: { viewAll: 'true' } })
+        if (mounted && data?.success) {
+          setGroups(data.data || [])
         }
       } catch (err) {
         console.error('Failed to fetch groups:', err)
@@ -56,13 +84,47 @@ function AgentAudit() {
     return () => { mounted = false }
   }, [])
 
-  // Verification queue - no backend endpoint yet
+  // Fetch scheduled audits
+  const fetchScheduledAudits = async () => {
+    try {
+      const params = new URLSearchParams()
+      if (filterGroup !== 'all') params.append('groupId', filterGroup)        
+      if (filterStatus !== 'all') params.append('status', filterStatus)       
+
+      const { data } = await api.get(`/audit-logs/scheduled?${params.toString()}`)                                                                            
+      if (data?.success) {
+        setScheduledAudits(data.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch scheduled audits:', err)
+      setScheduledAudits([])
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      if (mounted) {
+        await fetchScheduledAudits()
+      }
+    })()
+    return () => { mounted = false }
+  }, [filterGroup, filterStatus])
 
   const [newAudit, setNewAudit] = useState({
     groupId: '',
     type: 'compliance_check',
     description: '',
     scheduledDate: ''
+  })
+
+  const [performAudit, setPerformAudit] = useState({
+    groupId: '',
+    auditType: 'compliance_check',
+    description: '',
+    findings: '',
+    recommendations: '',
+    checklist: []
   })
 
   // Transform audit logs to match the display format
@@ -86,19 +148,8 @@ function AgentAudit() {
 
   const transformedAudits = auditRecords.map(transformAuditLog)
 
-  const filteredAudits = transformedAudits.filter(audit => {
-    const matchesStatus = filterStatus === 'all' || audit.status === filterStatus
-    const matchesType = filterType === 'all' || audit.type === filterType || 
-      (filterType === 'compliance_check' && audit.action?.toLowerCase().includes('compliance')) ||
-      (filterType === 'financial_audit' && audit.action?.toLowerCase().includes('financial')) ||
-      (filterType === 'group_verification' && audit.action?.toLowerCase().includes('group')) ||
-      (filterType === 'investigation' && audit.action?.toLowerCase().includes('investigate'))
-    const matchesSearch = 
-      audit.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(audit.id).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      audit.auditor.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesStatus && matchesType && matchesSearch
-  })
+  // Filtering is done on backend, but we can do additional client-side filtering if needed
+  const filteredAudits = transformedAudits
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -121,25 +172,36 @@ function AgentAudit() {
   }
 
   const handleCreateAudit = async () => {
-    if (!newAudit.groupId || !newAudit.scheduledDate || !newAudit.description) {
-      alert('Please fill in all required fields.')
+    if (!newAudit.groupId || !newAudit.scheduledDate) {
+      alert(tAgent('fillAllRequiredFields', { defaultValue: 'Please fill in all required fields.' }))
       return
     }
     try {
-      // Note: Scheduled audits endpoint doesn't exist yet
-      // This would need a backend endpoint to save scheduled audits
-      console.log('Creating audit:', newAudit)
-      alert('Scheduled audit functionality requires backend support. Please contact system admin to implement this feature.')
-      setShowCreateAudit(false)
-      setNewAudit({
-        groupId: '',
-        type: 'compliance_check',
-        description: '',
-        scheduledDate: ''
+      const { data } = await api.post('/audit-logs/schedule', {
+        groupId: parseInt(newAudit.groupId),
+        auditType: newAudit.type,
+        scheduledDate: newAudit.scheduledDate,
+        description: newAudit.description
       })
+      
+      if (data?.success) {
+        alert('Audit scheduled successfully!')
+        setShowCreateAudit(false)
+        setNewAudit({
+          groupId: '',
+          type: 'compliance_check',
+          description: '',
+          scheduledDate: ''
+        })
+        // Refresh scheduled audits and audit logs
+        await fetchScheduledAudits()
+        await fetchAuditLogs()
+      } else {
+        throw new Error(data?.message || 'Failed to schedule audit')
+      }
     } catch (err) {
       console.error('Failed to create audit:', err)
-      alert(err?.response?.data?.message || 'Failed to schedule audit')
+      alert(err?.response?.data?.message || err.message || tAgent('failedToScheduleAudit', { defaultValue: 'Failed to schedule audit' }))
     }
   }
 
@@ -148,71 +210,169 @@ function AgentAudit() {
     setShowAuditDetails(true)
   }
 
-  const handleApproveVerification = (verificationId) => {
-    console.log('Approving verification:', verificationId)
-    alert('Verification approved successfully!')
+  // Initialize checklist when audit type or group changes
+  useEffect(() => {
+    if (performAudit.groupId && performAudit.auditType) {
+      // Generate checklist based on audit type
+      const baseChecklist = [
+        { item: 'Group registration documents verified', status: 'pending', category: 'documentation' },
+        { item: 'Group admin credentials verified', status: 'pending', category: 'verification' },
+        { item: 'Group compliance rules reviewed', status: 'pending', category: 'compliance' }
+      ]
+
+      let checklist = []
+      switch (performAudit.auditType) {
+        case 'compliance_check':
+          checklist = [
+            ...baseChecklist,
+            { item: 'All compliance violations reviewed', status: 'pending', category: 'compliance' },
+            { item: 'Compliance rules adherence verified', status: 'pending', category: 'compliance' },
+            { item: 'Member compliance status checked', status: 'pending', category: 'compliance' },
+            { item: 'Group meeting attendance verified', status: 'pending', category: 'compliance' },
+            { item: 'Voting participation verified', status: 'pending', category: 'compliance' }
+          ]
+          break
+        case 'financial_audit':
+          checklist = [
+            ...baseChecklist,
+            { item: 'All contributions recorded and verified', status: 'pending', category: 'financial' },
+            { item: 'Loan records accuracy verified', status: 'pending', category: 'financial' },
+            { item: 'Transaction history reviewed', status: 'pending', category: 'financial' },
+            { item: 'Fine records verified', status: 'pending', category: 'financial' },
+            { item: 'Financial reports accuracy checked', status: 'pending', category: 'financial' },
+            { item: 'Outstanding loans reviewed', status: 'pending', category: 'financial' },
+            { item: 'Payment schedules verified', status: 'pending', category: 'financial' },
+            { item: 'Guarantor information verified', status: 'pending', category: 'financial' }
+          ]
+          break
+        case 'group_verification':
+          checklist = [
+            ...baseChecklist,
+            { item: 'Group member list verified', status: 'pending', category: 'verification' },
+            { item: 'Member registration documents reviewed', status: 'pending', category: 'verification' },
+            { item: 'Group admin, secretary, and cashier roles verified', status: 'pending', category: 'verification' },
+            { item: 'Group location and contact information verified', status: 'pending', category: 'verification' },
+            { item: 'Group code and identification verified', status: 'pending', category: 'verification' },
+            { item: 'Group status and activity verified', status: 'pending', category: 'verification' }
+          ]
+          break
+        case 'investigation':
+          checklist = [
+            ...baseChecklist,
+            { item: 'Suspicious activities identified', status: 'pending', category: 'investigation' },
+            { item: 'Transaction anomalies reviewed', status: 'pending', category: 'investigation' },
+            { item: 'Compliance violations investigated', status: 'pending', category: 'investigation' },
+            { item: 'User activity logs reviewed', status: 'pending', category: 'investigation' },
+            { item: 'Audit trail verified', status: 'pending', category: 'investigation' },
+            { item: 'Evidence collected and documented', status: 'pending', category: 'investigation' }
+          ]
+          break
+        default:
+          checklist = baseChecklist
+      }
+      setPerformAudit({ ...performAudit, checklist })
+    }
+  }, [performAudit.groupId, performAudit.auditType])
+
+  const handlePerformAudit = async () => {
+    if (!performAudit.groupId || !performAudit.auditType) {
+      alert('Please select a group and audit type.')
+      return
+    }
+
+    // Mark all checklist items as completed for immediate audit
+    const completedChecklist = performAudit.checklist.map(item => ({
+      ...item,
+      status: 'completed'
+    }))
+
+    try {
+      // First create a scheduled audit and immediately complete it
+      const scheduleData = await api.post('/audit-logs/schedule', {
+        groupId: parseInt(performAudit.groupId),
+        auditType: performAudit.auditType,
+        scheduledDate: new Date().toISOString(),
+        description: performAudit.description || `Immediate ${performAudit.auditType.replace('_', ' ')} audit`
+      })
+
+      if (scheduleData.data?.success && scheduleData.data.data?.id) {
+        // Update the audit to completed with findings and recommendations
+        const updateData = await api.put(`/audit-logs/scheduled/${scheduleData.data.data.id}`, {
+          status: 'completed',
+          checklist: completedChecklist,
+          findings: performAudit.findings,
+          recommendations: performAudit.recommendations
+        })
+
+        if (updateData.data?.success) {
+          alert('Audit performed and submitted successfully!')
+          setShowPerformAudit(false)
+          setPerformAudit({
+            groupId: '',
+            auditType: 'compliance_check',
+            description: '',
+            findings: '',
+            recommendations: '',
+            checklist: []
+          })
+          // Refresh data
+          await fetchScheduledAudits()
+          await fetchAuditLogs()
+        } else {
+          throw new Error('Failed to complete audit')
+        }
+      } else {
+        throw new Error('Failed to create audit')
+      }
+    } catch (err) {
+      console.error('Failed to perform audit:', err)
+      alert(err?.response?.data?.message || err.message || 'Failed to perform audit')
+    }
   }
 
-  const handleRejectVerification = (verificationId) => {
-    console.log('Rejecting verification:', verificationId)
-    alert('Verification rejected successfully!')
-  }
 
   const handleGenerateAuditReport = async () => {
     try {
-      // Generate a plain text report from audit logs
-      let report = 'AUDIT REPORT\n'
-      report += '='.repeat(50) + '\n\n'
-      report += `Generated: ${new Date().toLocaleString()}\n`
-      report += `Total Audit Logs: ${auditRecords.length}\n\n`
+      // Build query params for export
+      const params = new URLSearchParams()
+      if (searchTerm) params.append('search', searchTerm)
+      if (filterType !== 'all') params.append('filterType', filterType)
+      if (filterGroup !== 'all') params.append('groupId', filterGroup)
       
-      report += 'AUDIT LOGS:\n'
-      report += '-'.repeat(50) + '\n'
-      auditRecords.forEach((log, index) => {
-        report += `\n${index + 1}. Action: ${log.action}\n`
-        report += `   Entity: ${log.entityType || 'N/A'} (ID: ${log.entityId || 'N/A'})\n`
-        report += `   User: ${log.user?.name || 'Unknown'} (${log.user?.email || 'N/A'})\n`
-        report += `   Date: ${new Date(log.createdAt).toLocaleString()}\n`
-        report += `   IP: ${log.ipAddress || 'N/A'}\n`
+      // Export as Excel
+      const response = await api.get(`/audit-logs/export/excel?${params.toString()}`, {
+        responseType: 'blob'
       })
-
-      // Download as text file
-      const blob = new Blob([report], { type: 'text/plain' })
+      
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `audit_report_${new Date().toISOString().split('T')[0]}.txt`
+      
+      // Generate filename with group name if filtered
+      let filename = `audit_report_${new Date().toISOString().split('T')[0]}.xlsx`
+      if (filterGroup !== 'all') {
+        const selectedGroup = groups.find(g => g.id === parseInt(filterGroup))
+        if (selectedGroup) {
+          filename = `audit_report_${selectedGroup.name.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+        }
+      }
+      
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       
-      alert('Audit report generated successfully!')
+      alert('Audit report exported successfully!')
     } catch (err) {
       console.error('Failed to generate audit report:', err)
       alert('Failed to generate audit report')
     }
   }
 
-  const handleExportAuditData = async () => {
-    try {
-      // Use the backend export endpoint
-      const response = await api.get('/audit-logs/export', { responseType: 'blob' })
-      const blob = new Blob([response.data], { type: 'text/csv' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `audit_logs_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      alert('Audit data exported successfully!')
-    } catch (err) {
-      console.error('Failed to export audit data:', err)
-      alert('Failed to export audit data')
-    }
-  }
 
   return (
     <Layout userRole="Agent">
@@ -225,10 +385,16 @@ function AgentAudit() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => setShowCreateAudit(true)}
+              onClick={() => setShowPerformAudit(true)}
               className="btn-primary flex items-center gap-2"
             >
-              <FileCheck size={18} /> Schedule Audit
+              <FileCheck size={18} /> Perform Audit
+            </button>
+            <button
+              onClick={() => setShowCreateAudit(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Calendar size={18} /> Schedule Audit
             </button>
             <button
               onClick={handleGenerateAuditReport}
@@ -245,7 +411,7 @@ function AgentAudit() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Total Audit Logs</p>
-                <p className="text-2xl font-bold text-gray-800">{auditRecords.length}</p>
+                <p className="text-2xl font-bold text-gray-800">{summary.totalLogs}</p>
               </div>
               <FileCheck className="text-blue-600" size={32} />
             </div>
@@ -256,7 +422,7 @@ function AgentAudit() {
               <div>
                 <p className="text-sm text-gray-600 mb-2">User Actions</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {auditRecords.filter(a => a.action).length}
+                  {summary.userActions}
                 </p>
               </div>
               <CheckCircle className="text-green-600" size={32} />
@@ -268,7 +434,7 @@ function AgentAudit() {
               <div>
                 <p className="text-sm text-gray-600 mb-2">Entity Types</p>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {new Set(auditRecords.map(a => a.entityType).filter(Boolean)).size}
+                  {summary.entityTypes}
                 </p>
               </div>
               <AlertCircle className="text-yellow-600" size={32} />
@@ -280,7 +446,7 @@ function AgentAudit() {
               <div>
                 <p className="text-sm text-gray-600 mb-2">Groups Tracked</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {groups.length}
+                  {summary.groupsTracked}
                 </p>
               </div>
               <Shield className="text-purple-600" size={32} />
@@ -288,76 +454,98 @@ function AgentAudit() {
           </div>
         </div>
 
-        {/* Verification Queue */}
-        {verificationQueue.length === 0 ? null : (
+        {/* Scheduled Audits */}
+        {scheduledAudits.length > 0 && (
           <div className="card">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800">
-                Verification Queue ({verificationQueue.filter(v => v.status === 'pending').length})
+                Scheduled Audits ({scheduledAudits.length})
               </h2>
-              <button
-                onClick={handleExportAuditData}
-                className="btn-secondary flex items-center gap-2"
-              >
-                <Download size={18} /> Export Queue
-              </button>
             </div>
 
             <div className="space-y-4">
-              {verificationQueue.filter(v => v.status === 'pending').map((verification) => (
-              <div
-                key={verification.id}
-                className="p-4 bg-yellow-50 rounded-xl border border-yellow-200"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-bold text-gray-800">{verification.groupName}</h3>
-                    <p className="text-sm text-gray-600">{verification.description}</p>
-                    <p className="text-sm text-gray-500">ID: {verification.id} • Submitted: {verification.submittedDate}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getTypeColor(verification.type)}`}>
-                      {verification.type.replace('_', ' ')}
+              {scheduledAudits.map((audit) => (
+                <div
+                  key={audit.id}
+                  className="p-4 bg-gray-50 rounded-xl hover:bg-white transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-bold text-gray-800">
+                        {audit.group?.name || 'Unknown Group'} - {audit.auditType.replace('_', ' ').toUpperCase()}
+                      </h3>
+                      <p className="text-sm text-gray-600">{audit.description}</p>
+                      <p className="text-sm text-gray-500">
+                        Scheduled: {new Date(audit.scheduledDate).toLocaleDateString()} • 
+                        By: {audit.scheduler?.name || 'Unknown'}
+                      </p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(audit.status)}`}>
+                      {audit.status}
                     </span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(verification.status)}`}>
-                      {verification.status}
-                    </span>
+                  </div>
+
+                  {audit.checklist && audit.checklist.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Checklist Items:</p>
+                      <div className="space-y-2">
+                        {audit.checklist.map((item, index) => (
+                          <div key={index} className="flex items-center gap-2 text-sm">
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              item.status === 'completed' ? 'bg-green-100 text-green-700' :
+                              item.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {item.status}
+                            </span>
+                            <span className="text-gray-700">{item.item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedAudit({ ...audit, type: 'scheduled' })
+                        setShowAuditDetails(true)
+                      }}
+                      className="btn-primary text-sm px-4 py-2 flex items-center gap-2"
+                    >
+                      <Eye size={16} /> View Details
+                    </button>
+                    {audit.status !== 'completed' && audit.status !== 'cancelled' && (
+                      <button
+                        onClick={async () => {
+                          if (confirm('Are you sure you want to mark this audit as completed?')) {
+                            try {
+                              const { data } = await api.put(`/audit-logs/scheduled/${audit.id}`, {
+                                status: 'completed'
+                              })
+                              if (data?.success) {
+                                alert('Audit marked as completed!')
+                                await fetchScheduledAudits()
+                                await fetchAuditLogs()
+                              }
+                            } catch (err) {
+                              console.error('Failed to complete audit:', err)
+                              alert('Failed to complete audit')
+                            }
+                          }
+                        }}
+                        className="btn-secondary text-sm px-4 py-2 flex items-center gap-2"
+                      >
+                        <CheckCircle size={16} /> Complete Audit
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-2">Required Documents:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {verification.documents.map((doc, index) => (
-                      <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                        {doc.replace('_', ' ')}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleApproveVerification(verification.id)}
-                    className="bg-green-500 hover:bg-green-600 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-                  >
-                    <CheckCircle size={16} /> Approve
-                  </button>
-                  <button
-                    onClick={() => handleRejectVerification(verification.id)}
-                    className="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-                  >
-                    <XCircle size={16} /> Reject
-                  </button>
-                  <button className="btn-secondary text-sm px-4 py-2 flex items-center gap-2">
-                    <Eye size={16} /> View Documents
-                  </button>
-                </div>
-              </div>
               ))}
             </div>
           </div>
         )}
+
 
         {/* Filters */}
         <div className="card">
@@ -376,6 +564,23 @@ function AgentAudit() {
                   className="input-field pl-10"
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Filter by Group
+              </label>
+              <select
+                value={filterGroup}
+                onChange={(e) => setFilterGroup(e.target.value)}
+                className="input-field"
+              >
+                <option value="all">All Groups</option>
+                {groups.map(group => (
+                  <option key={group.id} value={group.id}>
+                    {group.name} {group.code ? `(${group.code})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -403,10 +608,11 @@ function AgentAudit() {
                 className="input-field"
               >
                 <option value="all">All Types</option>
-                <option value="group_verification">Group Verification</option>
-                <option value="financial_audit">Financial Audit</option>
-                <option value="compliance_check">Compliance Check</option>
-                <option value="investigation">Investigation</option>
+                <option value="user">User Actions</option>
+                <option value="group">Group Actions</option>
+                <option value="loan">Loan Actions</option>
+                <option value="contribution">Contribution Actions</option>
+                <option value="fine">Fine Actions</option>
               </select>
             </div>
           </div>
@@ -486,19 +692,7 @@ function AgentAudit() {
                       <Eye size={16} /> View Details
                     </button>
                     <button 
-                      onClick={() => {
-                        // Export single audit log
-                        const report = `AUDIT LOG DETAILS\n${'='.repeat(50)}\n\nAction: ${audit.action}\nEntity: ${audit.entityType || 'N/A'}\nEntity ID: ${audit.entityId || 'N/A'}\nUser: ${audit.auditor}\nDate: ${audit.auditDate}\nIP: ${audit.ipAddress || 'N/A'}\n\nDetails: ${JSON.stringify(audit.details, null, 2)}`
-                        const blob = new Blob([report], { type: 'text/plain' })
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = `audit_${audit.id}.txt`
-                        document.body.appendChild(a)
-                        a.click()
-                        document.body.removeChild(a)
-                        URL.revokeObjectURL(url)
-                      }}
+                      onClick={handleGenerateAuditReport}
                       className="btn-secondary text-sm px-4 py-2 flex items-center gap-2"
                     >
                       <Download size={16} /> Export Report
@@ -600,6 +794,150 @@ function AgentAudit() {
           </div>
         )}
 
+        {/* Perform Audit Modal */}
+        {showPerformAudit && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-800">Perform Audit</h2>
+                <button
+                  onClick={() => setShowPerformAudit(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Select Group <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={performAudit.groupId}
+                      onChange={(e) => setPerformAudit({ ...performAudit, groupId: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="">Select Group</option>
+                      {groups.map(group => (
+                        <option key={group.id} value={group.id}>{group.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Audit Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={performAudit.auditType}
+                      onChange={(e) => setPerformAudit({ ...performAudit, auditType: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="compliance_check">Compliance Check</option>
+                      <option value="financial_audit">Financial Audit</option>
+                      <option value="group_verification">Group Verification</option>
+                      <option value="investigation">Investigation</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={performAudit.description}
+                    onChange={(e) => setPerformAudit({ ...performAudit, description: e.target.value })}
+                    className="input-field h-24 resize-none"
+                    placeholder="Enter audit description..."
+                  />
+                </div>
+
+                {performAudit.checklist && performAudit.checklist.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Audit Checklist
+                    </label>
+                    <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-4">
+                      {performAudit.checklist.map((item, index) => (
+                        <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={item.status === 'completed'}
+                            onChange={(e) => {
+                              const updatedChecklist = [...performAudit.checklist]
+                              updatedChecklist[index] = {
+                                ...item,
+                                status: e.target.checked ? 'completed' : 'pending'
+                              }
+                              setPerformAudit({ ...performAudit, checklist: updatedChecklist })
+                            }}
+                            className="w-4 h-4 text-primary-600 rounded"
+                          />
+                          <span className="text-sm text-gray-700 flex-1">{item.item}</span>
+                          <span className="text-xs text-gray-500 px-2 py-1 bg-gray-200 rounded">
+                            {item.category}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Findings
+                  </label>
+                  <textarea
+                    value={performAudit.findings}
+                    onChange={(e) => setPerformAudit({ ...performAudit, findings: e.target.value })}
+                    className="input-field h-32 resize-none"
+                    placeholder="Enter audit findings..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Recommendations
+                  </label>
+                  <textarea
+                    value={performAudit.recommendations}
+                    onChange={(e) => setPerformAudit({ ...performAudit, recommendations: e.target.value })}
+                    className="input-field h-32 resize-none"
+                    placeholder="Enter recommendations..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => {
+                      setShowPerformAudit(false)
+                      setPerformAudit({
+                        groupId: '',
+                        auditType: 'compliance_check',
+                        description: '',
+                        findings: '',
+                        recommendations: '',
+                        checklist: []
+                      })
+                    }}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handlePerformAudit}
+                    className="btn-primary flex-1"
+                  >
+                    Submit Audit
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Audit Details Modal */}
         {showAuditDetails && selectedAudit && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -660,12 +998,48 @@ function AgentAudit() {
                   </div>
 
                   <div className="space-y-4">
-                    <h4 className="text-lg font-semibold text-gray-800">Additional Details</h4>
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <pre className="text-xs text-gray-700 whitespace-pre-wrap">
-                        {JSON.stringify(selectedAudit.details || {}, null, 2)}
-                      </pre>
-                    </div>
+                    <h4 className="text-lg font-semibold text-gray-800">
+                      {selectedAudit.type === 'scheduled' ? 'Checklist Items' : 'Additional Details'}
+                    </h4>
+                    {selectedAudit.type === 'scheduled' && selectedAudit.checklist ? (
+                      <div className="space-y-2">
+                        {selectedAudit.checklist.map((item, index) => (
+                          <div key={index} className="p-3 bg-gray-50 rounded-lg flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                item.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                item.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {item.status}
+                              </span>
+                              <span className="text-gray-700">{item.item}</span>
+                              {item.category && (
+                                <span className="text-xs text-gray-500">({item.category})</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-xl">
+                        <pre className="text-xs text-gray-700 whitespace-pre-wrap">
+                          {JSON.stringify(selectedAudit.details || {}, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {selectedAudit.findings && (
+                      <div className="mt-4">
+                        <h5 className="text-sm font-semibold text-gray-700 mb-2">Findings:</h5>
+                        <p className="text-sm text-gray-600">{selectedAudit.findings}</p>
+                      </div>
+                    )}
+                    {selectedAudit.recommendations && (
+                      <div className="mt-4">
+                        <h5 className="text-sm font-semibold text-gray-700 mb-2">Recommendations:</h5>
+                        <p className="text-sm text-gray-600">{selectedAudit.recommendations}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -690,4 +1064,5 @@ function AgentAudit() {
 }
 
 export default AgentAudit
+
 

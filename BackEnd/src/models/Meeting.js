@@ -46,6 +46,20 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Array of member IDs who attended'
     },
+    attendanceTakenBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'id'
+      },
+      comment: 'User ID who took the attendance'
+    },
+    attendanceTakenAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Date and time when attendance was taken'
+    },
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: false,

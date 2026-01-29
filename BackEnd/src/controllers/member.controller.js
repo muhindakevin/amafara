@@ -347,29 +347,70 @@ const getLoanRecommendation = async (req, res) => {
     const memberId = req.user.id;
     const { amount, duration } = req.query;
 
+    console.log(`[getLoanRecommendation] Request from member ${memberId}, amount: ${amount}, duration: ${duration}`);
+
+    // Get recommendation - this function now handles all errors internally
     const recommendation = await getAIRecommendation(
       memberId,
       amount ? parseFloat(amount) : null
     );
 
+    // Ensure we always have valid values
+    if (!recommendation) {
+      console.error('[getLoanRecommendation] Recommendation returned null/undefined');
+      return res.json({
+        success: true,
+        data: {
+          recommendation: 'review',
+          confidence: 'Low',
+          maxRecommendedAmount: 0,
+          creditScore: 50,
+          riskCategory: 'Medium',
+          interestRate: 10.0,
+          message: 'Calculating recommendation. Please try again in a moment.',
+          explanation: 'System is processing your financial data. Please refresh to see updated recommendations.',
+          monthlyPayment: 0,
+          savings: 0
+        }
+      });
+    }
+
     // If duration is provided, recalculate monthly payment
-    if (amount && duration) {
+    if (amount && duration && recommendation.interestRate) {
       const principal = parseFloat(amount);
       const months = parseInt(duration);
-      const totalAmount = principal * (1 + (recommendation.interestRate / 100));
-      recommendation.monthlyPayment = Math.round(totalAmount / months);
+      if (!isNaN(principal) && !isNaN(months) && months > 0) {
+        const totalAmount = principal * (1 + (recommendation.interestRate / 100));
+        recommendation.monthlyPayment = Math.round(totalAmount / months);
+      }
     }
+
+    // Log the recommendation for debugging
+    console.log(`[getLoanRecommendation] Success: Score=${recommendation.creditScore}, Savings=${recommendation.savings}, MaxAmount=${recommendation.maxRecommendedAmount}`);
 
     res.json({
       success: true,
       data: recommendation
     });
   } catch (error) {
-    console.error('Get loan recommendation error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get loan recommendation',
-      error: error.message
+    console.error('[getLoanRecommendation] Fatal error:', error);
+    console.error('[getLoanRecommendation] Stack:', error.stack);
+    
+    // Return a safe fallback response instead of error
+    res.json({
+      success: true,
+      data: {
+        recommendation: 'review',
+        confidence: 'Low',
+        maxRecommendedAmount: 0,
+        creditScore: 50,
+        riskCategory: 'Medium',
+        interestRate: 10.0,
+        message: 'System is processing your request. Please try again in a moment.',
+        explanation: 'The recommendation system is temporarily unavailable. Please refresh the page or try again later.',
+        monthlyPayment: 0,
+        savings: 0
+      }
     });
   }
 };

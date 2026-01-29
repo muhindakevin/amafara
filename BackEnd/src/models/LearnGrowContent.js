@@ -43,6 +43,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM('draft', 'published', 'archived'),
       defaultValue: 'draft'
     },
+    targetAudience: {
+      type: DataTypes.ENUM('members', 'secretary', 'agent', 'agents', 'both'),
+      defaultValue: 'members',
+      allowNull: false
+    },
     views: {
       type: DataTypes.INTEGER,
       defaultValue: 0

@@ -1,88 +1,445 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { TrendingUp, DollarSign, Users, FileText, Download, Filter, Calendar, BarChart3, PieChart } from 'lucide-react'
 import Layout from '../components/Layout'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Cell } from 'recharts'
+import { useTranslation } from 'react-i18next'
+import api from '../utils/api'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts'
+import { formatCurrency, formatDate } from '../utils/pdfExport'
+import * as XLSX from 'xlsx'
 
 function GroupAdminAnalytics() {
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
   const [dateRange, setDateRange] = useState('month')
   const [selectedChart, setSelectedChart] = useState('savings')
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalSavings: 0,
+    activeMembers: 0,
+    totalLoans: 0,
+    repaymentRate: 0
+  })
+  const [savingsData, setSavingsData] = useState([])
+  const [loanData, setLoanData] = useState([])
+  const [memberStatusData, setMemberStatusData] = useState([])
+  const [contributionData, setContributionData] = useState([])
+  const [recentTransactions, setRecentTransactions] = useState([])
+  const [topPerformers, setTopPerformers] = useState([])
+  const [riskAlerts, setRiskAlerts] = useState([])
+  const [groupName, setGroupName] = useState('')
 
-  // Sample data for charts
-  const savingsData = [
-    { month: 'Jan', amount: 450000 },
-    { month: 'Feb', amount: 520000 },
-    { month: 'Mar', amount: 480000 },
-    { month: 'Apr', amount: 610000 },
-    { month: 'May', amount: 550000 },
-    { month: 'Jun', amount: 680000 }
-  ]
+  useEffect(() => {
+    let mounted = true
+    async function loadAnalytics() {
+      try {
+        setLoading(true)
+        const me = await api.get('/auth/me')
+        const groupId = me.data?.data?.groupId
+        if (!groupId || !mounted) return
 
-  const loanData = [
-    { month: 'Jan', approved: 3, rejected: 1, pending: 2 },
-    { month: 'Feb', approved: 5, rejected: 0, pending: 1 },
-    { month: 'Mar', approved: 4, rejected: 2, pending: 3 },
-    { month: 'Apr', approved: 6, rejected: 1, pending: 2 },
-    { month: 'May', approved: 5, rejected: 0, pending: 1 },
-    { month: 'Jun', approved: 7, rejected: 1, pending: 2 }
-  ]
+        // Fetch stats with error handling
+        let statsData = {}
+        try {
+          const statsRes = await api.get(`/groups/${groupId}/stats`)
+          statsData = statsRes.data?.data || {}
+        } catch (statsError) {
+          console.error('[GroupAdminAnalytics] Error fetching stats:', statsError)
+          // Continue with default values
+          statsData = { totalSavings: 0, totalMembers: 0 }
+        }
+        
+        // Fetch group data for members with error handling
+        let members = []
+        let groupNameValue = ''
+        try {
+          const groupRes = await api.get(`/groups/${groupId}`)
+          const groupData = groupRes.data?.data || {}
+          members = Array.isArray(groupData.members) ? groupData.members : []
+          groupNameValue = groupData.name || ''
+          
+          // If members array is empty, try fetching from members endpoint
+          if (members.length === 0) {
+            try {
+              const membersRes = await api.get(`/groups/${groupId}/members`)
+              if (membersRes.data?.success && Array.isArray(membersRes.data.data)) {
+                members = membersRes.data.data
+              }
+            } catch (memberError) {
+              console.error('[GroupAdminAnalytics] Error fetching members:', memberError)
+            }
+          }
+        } catch (groupError) {
+          console.error('[GroupAdminAnalytics] Error fetching group:', groupError)
+          // Try to fetch members directly
+          try {
+            const membersRes = await api.get(`/groups/${groupId}/members`)
+            if (membersRes.data?.success && Array.isArray(membersRes.data.data)) {
+              members = membersRes.data.data
+            }
+          } catch (memberError) {
+            console.error('[GroupAdminAnalytics] Error fetching members:', memberError)
+          }
+        }
+        
+        setGroupName(groupNameValue)
+        
+        // Fetch loans with error handling
+        let allLoans = []
+        try {
+          const loansRes = await api.get('/loans/requests?status=all')
+          allLoans = Array.isArray(loansRes.data?.data) 
+            ? loansRes.data.data.filter(l => l.groupId === groupId || l.groupId === parseInt(groupId))
+            : []
+        } catch (loansError) {
+          console.error('[GroupAdminAnalytics] Error fetching loans:', loansError)
+        }
+        
+        // Fetch contributions for chart data with error handling
+        let contributions = []
+        try {
+          const contribsRes = await api.get('/contributions', { params: { groupId } })
+          contributions = Array.isArray(contribsRes.data?.data) ? contribsRes.data.data : []
+        } catch (contribsError) {
+          console.error('[GroupAdminAnalytics] Error fetching contributions:', contribsError)
+        }
+        
+        // Fetch transactions with error handling
+        let transactions = []
+        try {
+          const transRes = await api.get('/transactions', { params: { groupId, limit: 10 } })
+          transactions = Array.isArray(transRes.data?.data) ? transRes.data.data.slice(0, 4) : []
+        } catch (transError) {
+          console.error('[GroupAdminAnalytics] Error fetching transactions:', transError)
+        }
 
-  const memberStatusData = [
-    { name: 'Active', value: 45, color: '#10B981' },
-    { name: 'Burned', value: 3, color: '#EF4444' },
-    { name: 'Inactive', value: 2, color: '#6B7280' }
-  ]
+        if (!mounted) return
 
-  const contributionData = [
-    { name: 'On Time', value: 85, color: '#10B981' },
-    { name: 'Late', value: 12, color: '#F59E0B' },
-    { name: 'Missed', value: 3, color: '#EF4444' }
-  ]
+        // Calculate stats
+        const totalLoans = allLoans.reduce((sum, l) => sum + Number(l.amount || 0), 0)
+        const paidLoans = allLoans.filter(l => l.status === 'approved' || l.status === 'disbursed').length
+        const repaymentRate = allLoans.length > 0 ? Math.round((paidLoans / allLoans.length) * 100) : 0
 
-  const stats = [
+        setStats({
+          totalSavings: Number(statsData.totalSavings) || 0,
+          activeMembers: Number(statsData.totalMembers) || 0,
+          totalLoans: totalLoans,
+          repaymentRate: repaymentRate
+        })
+
+        // Generate savings data (last 6 months)
+        const now = new Date()
+        const monthlySavings = []
+        for (let i = 5; i >= 0; i--) {
+          const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          const monthName = monthDate.toLocaleDateString('en-US', { month: 'short' })
+          const monthContribs = contributions.filter(c => {
+            const contribDate = new Date(c.createdAt || c.contributionDate)
+            return contribDate.getMonth() === monthDate.getMonth() && 
+                   contribDate.getFullYear() === monthDate.getFullYear() &&
+                   (c.status === 'approved' || c.status === 'completed')
+          })
+          const amount = monthContribs.reduce((sum, c) => sum + Number(c.amount || 0), 0)
+          monthlySavings.push({ month: monthName, amount })
+        }
+        setSavingsData(monthlySavings)
+
+        // Generate loan data (last 6 months)
+        const monthlyLoans = []
+        for (let i = 5; i >= 0; i--) {
+          const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          const monthName = monthDate.toLocaleDateString('en-US', { month: 'short' })
+          const monthLoansFiltered = allLoans.filter(l => {
+            const loanDate = new Date(l.createdAt || l.requestDate)
+            return loanDate.getMonth() === monthDate.getMonth() && 
+                   loanDate.getFullYear() === monthDate.getFullYear()
+          })
+          monthlyLoans.push({
+            month: monthName,
+            approved: monthLoansFiltered.filter(l => l.status === 'approved').length,
+            rejected: monthLoansFiltered.filter(l => l.status === 'rejected').length,
+            pending: monthLoansFiltered.filter(l => l.status === 'pending').length
+          })
+        }
+        setLoanData(monthlyLoans)
+
+        // Member status data
+        const activeMembers = members.filter(m => m.status === 'active' && m.role === 'Member').length
+        const burnedMembers = members.filter(m => m.status === 'burned').length
+        const inactiveMembers = members.filter(m => m.status === 'inactive').length
+        setMemberStatusData([
+          { name: 'Active', value: activeMembers, color: '#10B981' },
+          { name: 'Burned', value: burnedMembers, color: '#EF4444' },
+          { name: 'Inactive', value: inactiveMembers, color: '#6B7280' }
+        ])
+
+        // Contribution status data
+        const onTime = contributions.filter(c => c.status === 'approved' || c.status === 'completed').length
+        const late = contributions.filter(c => c.status === 'late').length
+        const missed = contributions.filter(c => c.status === 'rejected' || c.status === 'cancelled').length
+        const total = contributions.length || 1
+        setContributionData([
+          { name: 'On Time', value: Math.round((onTime / total) * 100), color: '#10B981' },
+          { name: 'Late', value: Math.round((late / total) * 100), color: '#F59E0B' },
+          { name: 'Missed', value: Math.round((missed / total) * 100), color: '#EF4444' }
+        ])
+
+        // Recent transactions
+        setRecentTransactions(transactions.map(t => ({
+          id: t.id,
+          member: t.user?.name || 'Member',
+          type: t.type || 'Transaction',
+          amount: Number(t.amount || 0),
+          date: t.transactionDate || t.createdAt ? new Date(t.transactionDate || t.createdAt).toISOString().split('T')[0] : '',
+          status: t.status || 'completed'
+        })))
+
+        // Calculate top performers (based on total contributions)
+        const memberContributions = {}
+        contributions.forEach(c => {
+          const memberId = c.userId || c.memberId
+          if (memberId) {
+            if (!memberContributions[memberId]) {
+              memberContributions[memberId] = {
+                memberId,
+                name: c.user?.name || members.find(m => m.id === memberId)?.name || 'Unknown',
+                total: 0
+              }
+            }
+            if (c.status === 'approved' || c.status === 'completed') {
+              memberContributions[memberId].total += Number(c.amount || 0)
+            }
+          }
+        })
+        
+        const topPerformersList = Object.values(memberContributions)
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 3)
+          .map((m, index) => ({
+            rank: index + 1,
+            name: m.name,
+            amount: m.total
+          }))
+        setTopPerformers(topPerformersList)
+
+        // Calculate risk alerts
+        const alerts = []
+        
+        // Members with late payments
+        const latePayments = contributions.filter(c => c.status === 'late').length
+        if (latePayments > 0) {
+          alerts.push(t('latePaymentsAlert', { count: latePayments, defaultValue: `${latePayments} member${latePayments > 1 ? 's' : ''} with late payments` }))
+        }
+        
+        // Members approaching loan limit (check loans)
+        const membersWithLoans = {}
+        allLoans.forEach(loan => {
+          if (loan.status === 'approved' || loan.status === 'disbursed') {
+            const memberId = loan.userId || loan.memberId
+            if (memberId) {
+              if (!membersWithLoans[memberId]) {
+                membersWithLoans[memberId] = 0
+              }
+              membersWithLoans[memberId] += Number(loan.amount || 0)
+            }
+          }
+        })
+        
+        // Check for members with high loan amounts (assuming max loan is 500,000 RWF)
+        const highLoanMembers = Object.entries(membersWithLoans).filter(([_, amount]) => amount > 400000).length
+        if (highLoanMembers > 0) {
+          alerts.push(t('highLoanMembersAlert', { count: highLoanMembers, defaultValue: `${highLoanMembers} member${highLoanMembers > 1 ? 's' : ''} approaching loan limit` }))
+        }
+        
+        // Members inactive for 30+ days
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        const inactiveMembers30Days = members.filter(m => {
+          if (m.status === 'inactive') return true
+          const lastActivity = m.lastActivityDate || m.updatedAt
+          if (!lastActivity) return false
+          return new Date(lastActivity) < thirtyDaysAgo
+        }).length
+        
+        if (inactiveMembers30Days > 0) {
+          alerts.push(t('inactiveMembersAlert', { count: inactiveMembers30Days, defaultValue: `${inactiveMembers30Days} member${inactiveMembers30Days > 1 ? 's' : ''} inactive for 30+ days` }))
+        }
+        
+        setRiskAlerts(alerts)
+      } catch (error) {
+        console.error('[GroupAdminAnalytics] Error loading analytics:', error)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    loadAnalytics()
+    return () => { mounted = false }
+  }, [dateRange])
+
+  const statsDisplay = [
     {
-      title: 'Total Group Savings',
-      value: 'RWF 2,850,000',
-      change: '+12.5%',
+      title: t('totalGroupSavings', { defaultValue: 'Total Group Savings' }),
+      value: `RWF ${stats.totalSavings.toLocaleString()}`,
+      change: '+0%',
       changeType: 'positive',
       icon: DollarSign,
       color: 'text-green-600'
     },
     {
-      title: 'Active Members',
-      value: '45',
-      change: '+2',
+      title: t('activeMembers', { defaultValue: 'Active Members' }),
+      value: String(stats.activeMembers),
+      change: '+0',
       changeType: 'positive',
       icon: Users,
       color: 'text-blue-600'
     },
     {
-      title: 'Total Loans Given',
-      value: 'RWF 1,200,000',
-      change: '+8.3%',
+      title: t('totalLoansGiven', { defaultValue: 'Total Loans Given' }),
+      value: `RWF ${stats.totalLoans.toLocaleString()}`,
+      change: '+0%',
       changeType: 'positive',
       icon: FileText,
       color: 'text-purple-600'
     },
     {
-      title: 'Loan Repayment Rate',
-      value: '94.2%',
-      change: '+2.1%',
+      title: t('loanRepaymentRate', { defaultValue: 'Loan Repayment Rate' }),
+      value: `${stats.repaymentRate}%`,
+      change: '+0%',
       changeType: 'positive',
       icon: TrendingUp,
       color: 'text-orange-600'
     }
   ]
 
-  const recentTransactions = [
-    { id: 1, member: 'Kamikazi Marie', type: 'Contribution', amount: 5000, date: '2024-01-20', status: 'completed' },
-    { id: 2, member: 'Mukamana Alice', type: 'Loan Payment', amount: 15000, date: '2024-01-19', status: 'completed' },
-    { id: 3, member: 'Mutabazi Paul', type: 'Contribution', amount: 10000, date: '2024-01-18', status: 'completed' },
-    { id: 4, member: 'Ikirezi Jane', type: 'Interest', amount: 750, date: '2024-01-17', status: 'completed' }
-  ]
-
   const exportReport = () => {
-    console.log('Exporting analytics report...')
-    alert('Analytics report exported successfully!')
+    try {
+      const workbook = XLSX.utils.book_new()
+      const worksheetData = []
+      
+      // Title
+      worksheetData.push([t('analyticsDashboardReport', { defaultValue: 'Analytics Dashboard Report' })])
+      worksheetData.push([t('groupPerformanceAnalysis', { defaultValue: 'Group Performance Analysis' })])
+      worksheetData.push([])
+      
+      // Group info
+      worksheetData.push([t('group', { defaultValue: 'Group' }), groupName || tCommon('nA', { defaultValue: 'N/A' })])
+      worksheetData.push(['Report Date:', new Date().toLocaleString()])
+      worksheetData.push(['Date Range:', dateRange])
+      worksheetData.push([])
+      
+      // Summary Statistics
+      worksheetData.push(['SUMMARY STATISTICS'])
+      worksheetData.push([t('totalGroupSavings', { defaultValue: 'Total Group Savings' }), formatCurrency(stats.totalSavings)])
+      worksheetData.push([t('activeMembers', { defaultValue: 'Active Members' }), stats.activeMembers])
+      worksheetData.push(['Total Loans Given:', formatCurrency(stats.totalLoans)])
+      worksheetData.push(['Loan Repayment Rate:', `${stats.repaymentRate}%`])
+      worksheetData.push([])
+      
+      // Monthly Savings Trend
+      if (savingsData.length > 0) {
+        worksheetData.push(['MONTHLY SAVINGS TREND'])
+        worksheetData.push(['Month', 'Amount (RWF)'])
+        savingsData.forEach(d => {
+          worksheetData.push([d.month, d.amount])
+        })
+        worksheetData.push([])
+      }
+      
+      // Loan Status by Month
+      if (loanData.length > 0) {
+        worksheetData.push(['LOAN STATUS BY MONTH'])
+        worksheetData.push(['Month', 'Approved', 'Rejected', 'Pending'])
+        loanData.forEach(d => {
+          worksheetData.push([d.month, d.approved || 0, d.rejected || 0, d.pending || 0])
+        })
+        worksheetData.push([])
+      }
+      
+      // Member Status Distribution
+      if (memberStatusData.length > 0) {
+        worksheetData.push(['MEMBER STATUS DISTRIBUTION'])
+        worksheetData.push(['Status', 'Count'])
+        memberStatusData.forEach(d => {
+          worksheetData.push([d.name, d.value])
+        })
+        worksheetData.push([])
+      }
+      
+      // Contribution Performance
+      if (contributionData.length > 0) {
+        worksheetData.push(['CONTRIBUTION PERFORMANCE'])
+        worksheetData.push(['Status', 'Percentage'])
+        contributionData.forEach(d => {
+          worksheetData.push([d.name, `${d.value}%`])
+        })
+        worksheetData.push([])
+      }
+      
+      // Top Performers
+      if (topPerformers.length > 0) {
+        worksheetData.push(['TOP PERFORMERS'])
+        worksheetData.push(['Rank', 'Member Name', 'Total Contributions (RWF)'])
+        topPerformers.forEach(p => {
+          worksheetData.push([p.rank, p.name, p.amount])
+        })
+        worksheetData.push([])
+      }
+      
+      // Risk Alerts
+      if (riskAlerts.length > 0) {
+        worksheetData.push(['RISK ALERTS'])
+        riskAlerts.forEach(alert => {
+          worksheetData.push([alert])
+        })
+        worksheetData.push([])
+      }
+      
+      // Recent Transactions
+      if (recentTransactions.length > 0) {
+        worksheetData.push(['RECENT TRANSACTIONS'])
+        worksheetData.push(['Member', 'Type', 'Amount (RWF)', 'Date', 'Status'])
+        recentTransactions.forEach(t => {
+          worksheetData.push([
+            t.member || 'N/A',
+            t.type || 'Transaction',
+            t.amount,
+            t.date,
+            t.status.toUpperCase()
+          ])
+        })
+      }
+      
+      // Create worksheet
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
+      
+      // Set column widths
+      const colWidths = []
+      for (let i = 0; i < 10; i++) {
+        const maxLength = Math.max(
+          ...worksheetData.map(row => {
+            const cell = row[i]
+            return cell ? String(cell).length : 0
+          })
+        )
+        colWidths.push({ wch: Math.min(Math.max(maxLength + 2, 10), 50) })
+      }
+      worksheet['!cols'] = colWidths
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Analytics Report')
+      
+      // Generate filename
+      const dateStr = new Date().toISOString().split('T')[0]
+      const safeGroupName = (groupName || 'Group').replace(/[^a-zA-Z0-9]/g, '_')
+      const finalFilename = `Analytics_Report_${safeGroupName}_${dateStr}.xlsx`
+      
+      // Save file
+      XLSX.writeFile(workbook, finalFilename)
+      
+      alert('Analytics report exported successfully!')
+    } catch (error) {
+      console.error('[GroupAdminAnalytics] Error exporting Excel:', error)
+      alert('Failed to export report. Please try again.')
+    }
   }
 
   return (
@@ -91,32 +448,38 @@ function GroupAdminAnalytics() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Analytics Dashboard</h1>
-            <p className="text-gray-600 mt-1">Comprehensive insights into group performance</p>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('analyticsDashboard', { defaultValue: 'Analytics Dashboard' })}</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">{t('comprehensiveInsights', { defaultValue: 'Comprehensive insights into group performance' })}</p>
           </div>
           <div className="flex gap-2">
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              className="input-field"
+              className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
             >
-              <option value="week">Last Week</option>
-              <option value="month">Last Month</option>
-              <option value="quarter">Last Quarter</option>
-              <option value="year">Last Year</option>
+              <option value="week">{t('lastWeek', { defaultValue: 'Last Week' })}</option>
+              <option value="month">{t('lastMonth', { defaultValue: 'Last Month' })}</option>
+              <option value="quarter">{t('lastQuarter', { defaultValue: 'Last Quarter' })}</option>
+              <option value="year">{t('lastYear', { defaultValue: 'Last Year' })}</option>
             </select>
             <button
               onClick={exportReport}
               className="btn-secondary flex items-center gap-2"
             >
-              <Download size={18} /> Export Report
+              <Download size={18} /> {tCommon('exportReport')}
             </button>
           </div>
         </div>
 
+        {loading ? (
+          <div className="card text-center py-12">
+            <p className="text-gray-500 dark:text-gray-400">{t('loadingAnalytics', { defaultValue: 'Loading analytics...' })}</p>
+          </div>
+        ) : (
+          <>
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, index) => {
+          {statsDisplay.map((stat, index) => {
             const Icon = stat.icon
             return (
               <div key={index} className="card">
@@ -195,7 +558,7 @@ function GroupAdminAnalytics() {
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <RechartsPieChart>
-                  <PieChart
+                  <Pie
                     data={memberStatusData}
                     cx="50%"
                     cy="50%"
@@ -207,7 +570,7 @@ function GroupAdminAnalytics() {
                     {memberStatusData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
-                  </PieChart>
+                  </Pie>
                   <Tooltip />
                 </RechartsPieChart>
               </ResponsiveContainer>
@@ -234,7 +597,7 @@ function GroupAdminAnalytics() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <RechartsPieChart>
-                  <PieChart
+                  <Pie
                     data={contributionData}
                     cx="50%"
                     cy="50%"
@@ -246,7 +609,7 @@ function GroupAdminAnalytics() {
                     {contributionData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
-                  </PieChart>
+                  </Pie>
                   <Tooltip />
                 </RechartsPieChart>
               </ResponsiveContainer>
@@ -295,35 +658,60 @@ function GroupAdminAnalytics() {
         {/* Performance Insights */}
         <div className="card bg-gradient-to-r from-primary-50 to-blue-50 border-2 border-primary-200">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-            📊 Performance Insights
+            <BarChart3 size={24} className="text-primary-600" />
+            Performance Insights
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Top Performers</h3>
-              <ul className="space-y-1 text-sm text-gray-600">
-                <li>1. Mutabazi Paul - RWF 200,000</li>
-                <li>2. Kamikazi Marie - RWF 150,000</li>
-                <li>3. Mukamana Alice - RWF 120,000</li>
-              </ul>
+              {topPerformers.length > 0 ? (
+                <ul className="space-y-1 text-sm text-gray-600">
+                  {topPerformers.map((performer, index) => (
+                    <li key={index}>
+                      {performer.rank}. {performer.name} - {formatCurrency(performer.amount)}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500">No contribution data available</p>
+              )}
             </div>
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Risk Alerts</h3>
-              <ul className="space-y-1 text-sm text-gray-600">
-                <li>• 3 members with late payments</li>
-                <li>• 1 member approaching loan limit</li>
-                <li>• 2 members inactive for 30+ days</li>
-              </ul>
+              {riskAlerts.length > 0 ? (
+                <ul className="space-y-1 text-sm text-gray-600">
+                  {riskAlerts.map((alert, index) => (
+                    <li key={index}>• {alert}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-500">No risk alerts at this time</p>
+              )}
             </div>
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Recommendations</h3>
               <ul className="space-y-1 text-sm text-gray-600">
-                <li>• Increase contribution targets</li>
-                <li>• Review loan approval criteria</li>
-                <li>• Implement member engagement program</li>
+                {stats.totalSavings < 100000 && (
+                  <li>• Increase contribution targets</li>
+                )}
+                {stats.repaymentRate < 80 && (
+                  <li>• Review loan approval criteria</li>
+                )}
+                {riskAlerts.some(a => a.includes('inactive')) && (
+                  <li>• Implement member engagement program</li>
+                )}
+                {stats.activeMembers < 10 && (
+                  <li>• Focus on member recruitment</li>
+                )}
+                {riskAlerts.length === 0 && stats.repaymentRate >= 80 && (
+                  <li>• Group is performing well - maintain current strategies</li>
+                )}
               </ul>
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
     </Layout>
   )

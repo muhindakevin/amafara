@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { MessageCircle, Send, Bell, Users, FileText, Calendar, Plus, Eye, Download, Search, Filter, XCircle, CheckCircle } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function AgentCommunications() {
+  const { t } = useTranslation('common')
+  const { t: tAgent } = useTranslation('agent')
   const [selectedTab, setSelectedTab] = useState('broadcast')
   const [showCreateMessage, setShowCreateMessage] = useState(false)
   const [selectedMessage, setSelectedMessage] = useState(null)
@@ -12,9 +15,90 @@ function AgentCommunications() {
   const [notifications, setNotifications] = useState([])
   const [groups, setGroups] = useState([])
   const [selectedGroupForChat, setSelectedGroupForChat] = useState(null)
+  const [selectedChatForExport, setSelectedChatForExport] = useState(null)
   const [chatMessages, setChatMessages] = useState([])
   const [newChatMessage, setNewChatMessage] = useState('')
   const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState({
+    totalMessages: 0,
+    sentMessages: 0,
+    receivedMessages: 0,
+    unreadMessages: 0,
+    unreadNotifications: 0,
+    totalGroups: 0,
+    groupsMessaged: 0
+  })
+  const [users, setUsers] = useState([])
+  const [chatList, setChatList] = useState([])
+
+  // Fetch summary statistics
+  const fetchSummary = async () => {
+    try {
+      // Get all groups
+      const groupsRes = await api.get('/groups', { params: { viewAll: 'true' } })
+      const allGroups = groupsRes?.data?.data || []
+      
+      // Get chat list to find groups/users that messaged the agent
+      const chatListRes = await api.get('/chat/list')
+      const chats = chatListRes?.data?.data || []
+      
+      // Get all messages sent and received by agent
+      // We'll need to get messages from all chats
+      let totalSent = 0
+      let totalReceived = 0
+      let unreadCount = 0
+      const groupsWithMessages = new Set()
+      
+      for (const chat of chats) {
+        try {
+          if (chat.type === 'group' && chat.groupId) {
+            const messagesRes = await api.get(`/chat/${chat.groupId}`)
+            const messages = messagesRes?.data?.data || []
+            messages.forEach(msg => {
+              if (msg.senderId === chat.currentUserId) {
+                totalSent++
+              } else {
+                totalReceived++
+                if (!msg.isRead) unreadCount++
+              }
+            })
+            if (messages.length > 0) {
+              groupsWithMessages.add(chat.groupId)
+            }
+          } else if (chat.type === 'user' && chat.userId) {
+            const messagesRes = await api.get(`/chat/user?receiverId=${chat.userId}`)
+            const messages = messagesRes?.data?.data || []
+            messages.forEach(msg => {
+              if (msg.senderId === chat.currentUserId) {
+                totalSent++
+              } else {
+                totalReceived++
+                if (!msg.isRead) unreadCount++
+              }
+            })
+          }
+        } catch (err) {
+          console.error(`Failed to fetch messages for chat ${chat.id}:`, err)
+        }
+      }
+      
+      // Get unread notifications
+      const notificationsRes = await api.get('/notifications', { params: { read: 'false' } })
+      const unreadNotifications = notificationsRes?.data?.data || []
+      
+      setSummary({
+        totalMessages: totalSent + totalReceived,
+        sentMessages: totalSent,
+        receivedMessages: totalReceived,
+        unreadMessages: unreadCount,
+        unreadNotifications: unreadNotifications.length,
+        totalGroups: allGroups.length,
+        groupsMessaged: groupsWithMessages.size
+      })
+    } catch (err) {
+      console.error('Failed to fetch summary:', err)
+    }
+  }
 
   // Fetch announcements from database
   useEffect(() => {
@@ -38,13 +122,20 @@ function AgentCommunications() {
     return () => { mounted = false }
   }, [])
 
-  // Fetch notifications from database
+  // Fetch summary on mount
+  useEffect(() => {
+    fetchSummary()
+  }, [])
+
+  // Fetch notifications from database (includes system admin messages)
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
         const { data } = await api.get('/notifications')
         if (mounted) {
+          // Notifications already include all notifications for the logged-in user
+          // including those sent by system admin
           setNotifications(data?.data || [])
         }
       } catch (err) {
@@ -57,34 +148,55 @@ function AgentCommunications() {
     return () => { mounted = false }
   }, [])
 
-  // Fetch groups
+  // Fetch groups and users
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        const { data } = await api.get('/groups')
+        const groupsRes = await api.get('/groups', { params: { viewAll: 'true' } })
         if (mounted) {
-          setGroups(data?.data || [])
+          setGroups(groupsRes?.data?.data || [])
+        }
+        
+        // Fetch users for direct messaging
+        const usersRes = await api.get('/users', { params: { viewAll: 'true' } })
+        if (mounted) {
+          setUsers(usersRes?.data?.data || [])
+        }
+        
+        // Fetch chat list
+        const chatListRes = await api.get('/chat/list')
+        if (mounted) {
+          setChatList(chatListRes?.data?.data || [])
         }
       } catch (err) {
-        console.error('Failed to fetch groups:', err)
+        console.error('Failed to fetch groups/users:', err)
         if (mounted) {
           setGroups([])
+          setUsers([])
+          setChatList([])
         }
       }
     })()
     return () => { mounted = false }
   }, [])
 
-  // Fetch chat messages when a group is selected
+  // Fetch chat messages when a chat is selected
   useEffect(() => {
     if (!selectedGroupForChat) return
     let mounted = true
     ;(async () => {
       try {
-        const { data } = await api.get(`/chat/${selectedGroupForChat.id}`)
+        let messagesRes
+        if (selectedGroupForChat.type === 'group' && selectedGroupForChat.groupId) {
+          messagesRes = await api.get(`/chat/${selectedGroupForChat.groupId}`)
+        } else if (selectedGroupForChat.type === 'user' && selectedGroupForChat.userId) {
+          messagesRes = await api.get(`/chat/user?receiverId=${selectedGroupForChat.userId}`)
+        } else {
+          messagesRes = await api.get(`/chat/${selectedGroupForChat.id}`)
+        }
         if (mounted) {
-          setChatMessages(data?.data || [])
+          setChatMessages(messagesRes?.data?.data || [])
         }
       } catch (err) {
         console.error('Failed to fetch chat messages:', err)
@@ -101,7 +213,8 @@ function AgentCommunications() {
     content: '',
     type: 'announcement',
     priority: 'medium',
-    recipients: 'all',
+    recipientType: 'all', // 'all', 'group', 'user'
+    recipientId: '',
     scheduledDate: '',
     attachments: []
   })
@@ -145,24 +258,63 @@ function AgentCommunications() {
       alert('Please fill in title and content.')
       return
     }
+    
+    if (newMessage.recipientType !== 'all' && !newMessage.recipientId) {
+      alert('Please select a recipient.')
+      return
+    }
+    
     try {
-      const announcementData = {
-        title: newMessage.title,
-        content: newMessage.content,
-        targetAudience: newMessage.recipients === 'all' ? 'All Groups' : newMessage.recipients,
-        priority: newMessage.priority
+      if (newMessage.recipientType === 'user') {
+        // Send private message via chat
+        await api.post('/chat/user', {
+          message: `${newMessage.title}\n\n${newMessage.content}`,
+          recipientIds: [parseInt(newMessage.recipientId)]
+        })
+        
+        // Also create a notification for the recipient
+        const recipient = users.find(u => u.id === parseInt(newMessage.recipientId))
+        if (recipient) {
+          await api.post('/notifications', {
+            userId: parseInt(newMessage.recipientId),
+            type: 'message',
+            title: newMessage.title,
+            content: newMessage.content,
+            channel: 'in_app'
+          })
+        }
+      } else if (newMessage.recipientType === 'group') {
+        // Send group announcement
+        const announcementData = {
+          title: newMessage.title,
+          content: newMessage.content,
+          groupId: parseInt(newMessage.recipientId),
+          priority: newMessage.priority
+        }
+        await api.post('/announcements', announcementData)
+      } else {
+        // Send to all groups (broadcast)
+        const announcementData = {
+          title: newMessage.title,
+          content: newMessage.content,
+          targetAudience: 'All Groups',
+          priority: newMessage.priority
+        }
+        await api.post('/announcements', announcementData)
       }
-      await api.post('/announcements', announcementData)
-      // Refresh announcements
+      
+      // Refresh data
       const { data } = await api.get('/announcements')
       setBroadcastMessages(data?.data || [])
+      await fetchSummary()
       setShowCreateMessage(false)
       setNewMessage({
         title: '',
         content: '',
         type: 'announcement',
         priority: 'medium',
-        recipients: 'all',
+        recipientType: 'all',
+        recipientId: '',
         scheduledDate: '',
         attachments: []
       })
@@ -184,7 +336,7 @@ function AgentCommunications() {
       // Refresh announcements
       const { data } = await api.get('/announcements')
       setBroadcastMessages(data?.data || [])
-      alert('Message sent successfully!')
+      alert(tAgent('messageSentSuccessfully', { defaultValue: 'Message sent successfully!' }))
     } catch (err) {
       console.error('Failed to send message:', err)
       alert(err?.response?.data?.message || 'Failed to send message')
@@ -209,40 +361,69 @@ function AgentCommunications() {
 
   const handleExportMessages = async () => {
     try {
-      let exportData = ''
-      if (selectedTab === 'broadcast') {
-        exportData = 'BROADCAST MESSAGES EXPORT\n' + '='.repeat(50) + '\n\n'
-        broadcastMessages.forEach((msg, index) => {
-          exportData += `${index + 1}. ${msg.title}\n`
-          exportData += `   Content: ${msg.content || msg.message || ''}\n`
-          exportData += `   Type: ${msg.type || 'N/A'}\n`
-          exportData += `   Status: ${msg.status || 'N/A'}\n`
-          exportData += `   Date: ${msg.createdAt ? new Date(msg.createdAt).toLocaleString() : 'N/A'}\n\n`
-        })
-      } else if (selectedTab === 'notifications') {
-        exportData = 'NOTIFICATIONS EXPORT\n' + '='.repeat(50) + '\n\n'
-        notifications.forEach((notif, index) => {
-          exportData += `${index + 1}. ${notif.title || notif.message}\n`
-          exportData += `   Message: ${notif.message || ''}\n`
-          exportData += `   Type: ${notif.type || 'N/A'}\n`
-          exportData += `   Status: ${notif.isRead ? 'Read' : 'Unread'}\n`
-          exportData += `   Date: ${notif.createdAt ? new Date(notif.createdAt).toLocaleString() : 'N/A'}\n\n`
-        })
+      if (selectedTab === 'chats' && !selectedChatForExport) {
+        alert('Please select a chat to export.')
+        return
       }
-
-      const blob = new Blob([exportData], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${selectedTab}_export_${new Date().toISOString().split('T')[0]}.txt`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      
+      const XLSX = await import('xlsx')
+      let data = []
+      let filename = ''
+      
+      if (selectedTab === 'broadcast') {
+        filename = `broadcast_messages_${new Date().toISOString().split('T')[0]}.xlsx`
+        data = broadcastMessages.map(msg => ({
+          'ID': msg.id,
+          'Title': msg.title,
+          'Content': msg.content || msg.message || '',
+          'Type': msg.type || 'announcement',
+          'Priority': msg.priority || 'medium',
+          'Status': msg.status || (msg.sentAt ? 'sent' : 'draft'),
+          'Target Audience': msg.targetAudience || 'All Groups',
+          'Created Date': msg.createdAt ? new Date(msg.createdAt).toLocaleString() : 'N/A',
+          'Sent Date': msg.sentAt ? new Date(msg.sentAt).toLocaleString() : 'Not sent'
+        }))
+      } else if (selectedTab === 'notifications') {
+        filename = `notifications_${new Date().toISOString().split('T')[0]}.xlsx`
+        data = notifications.map(notif => ({
+          'ID': notif.id,
+          'Title': notif.title || notif.message || 'Notification',
+          'Content': notif.content || notif.message || '',
+          'Type': notif.type || 'general',
+          'Status': notif.read || notif.isRead ? 'Read' : 'Unread',
+          'Created Date': notif.createdAt ? new Date(notif.createdAt).toLocaleString() : 'N/A'
+        }))
+      } else if (selectedTab === 'chats' && selectedChatForExport) {
+        const chatName = selectedChatForExport.type === 'group' 
+          ? selectedChatForExport.groupName 
+          : selectedChatForExport.userName || `Chat_${selectedChatForExport.id}`
+        filename = `chat_history_${chatName.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+        data = chatMessages.map(msg => ({
+          'ID': msg.id,
+          'Sender': msg.sender?.name || 'Unknown',
+          'Message': msg.message || '',
+          'Type': msg.type || 'text',
+          'Read': msg.isRead ? 'Yes' : 'No',
+          'Date': msg.createdAt ? new Date(msg.createdAt).toLocaleString() : 'N/A'
+        }))
+      }
+      
+      if (data.length === 0) {
+        alert('No data to export.')
+        return
+      }
+      
+      // Create workbook and worksheet
+      const worksheet = XLSX.utils.json_to_sheet(data)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Data')
+      
+      // Generate Excel file
+      XLSX.writeFile(workbook, filename)
       alert('Export completed successfully!')
     } catch (err) {
       console.error('Failed to export:', err)
-      alert('Failed to export data')
+      alert('Failed to export data. Make sure to select a chat if exporting chat history.')
     }
   }
 
@@ -252,11 +433,26 @@ function AgentCommunications() {
       return
     }
     try {
-      await api.post(`/chat/${selectedGroupForChat.id}`, { message: newChatMessage })
+      if (selectedGroupForChat.type === 'group' && selectedGroupForChat.groupId) {
+        await api.post(`/chat/${selectedGroupForChat.groupId}`, { message: newChatMessage })
+      } else if (selectedGroupForChat.type === 'user' && selectedGroupForChat.userId) {
+        await api.post('/chat/user', {
+          message: newChatMessage,
+          recipientIds: [selectedGroupForChat.userId]
+        })
+      } else {
+        await api.post(`/chat/${selectedGroupForChat.id}`, { message: newChatMessage })
+      }
       setNewChatMessage('')
       // Refresh chat messages
-      const { data } = await api.get(`/chat/${selectedGroupForChat.id}`)
-      setChatMessages(data?.data || [])
+      if (selectedGroupForChat.type === 'group' && selectedGroupForChat.groupId) {
+        const { data } = await api.get(`/chat/${selectedGroupForChat.groupId}`)
+        setChatMessages(data?.data || [])
+      } else if (selectedGroupForChat.type === 'user' && selectedGroupForChat.userId) {
+        const { data } = await api.get(`/chat/user?receiverId=${selectedGroupForChat.userId}`)
+        setChatMessages(data?.data || [])
+      }
+      await fetchSummary()
     } catch (err) {
       console.error('Failed to send chat message:', err)
       alert(err?.response?.data?.message || 'Failed to send message')
@@ -294,7 +490,10 @@ function AgentCommunications() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-2">Total Messages</p>
-                <p className="text-2xl font-bold text-gray-800">{broadcastMessages.length}</p>
+                <p className="text-2xl font-bold text-gray-800">{summary.totalMessages}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Sent: {summary.sentMessages} • Received: {summary.receivedMessages}
+                </p>
               </div>
               <MessageCircle className="text-blue-600" size={32} />
             </div>
@@ -303,9 +502,12 @@ function AgentCommunications() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Unread Notifications</p>
+                <p className="text-sm text-gray-600 mb-2">Unread Messages & Notifications</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {notifications.filter(n => n.status === 'unread').length}
+                  {summary.unreadMessages + summary.unreadNotifications}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Messages: {summary.unreadMessages} • Notifications: {summary.unreadNotifications}
                 </p>
               </div>
               <Bell className="text-red-600" size={32} />
@@ -317,7 +519,7 @@ function AgentCommunications() {
               <div>
                 <p className="text-sm text-gray-600 mb-2">Total Groups</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {groups.length}
+                  {summary.totalGroups}
                 </p>
               </div>
               <Users className="text-green-600" size={32} />
@@ -327,9 +529,9 @@ function AgentCommunications() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Groups</p>
+                <p className="text-sm text-gray-600 mb-2">Groups That Messaged</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {groups.length}
+                  {summary.groupsMessaged}
                 </p>
               </div>
               <Send className="text-purple-600" size={32} />
@@ -530,26 +732,50 @@ function AgentCommunications() {
             {selectedTab === 'chats' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-800">Group Chats</h2>
+                  <h2 className="text-xl font-bold text-gray-800">Chats</h2>
+                  {selectedChatForExport && (
+                    <button
+                      onClick={handleExportMessages}
+                      className="btn-secondary flex items-center gap-2"
+                    >
+                      <Download size={18} /> Export Selected Chat
+                    </button>
+                  )}
                 </div>
 
                 {!selectedGroupForChat ? (
                   <div>
-                    <p className="text-gray-600 mb-4">Select a group to start chatting:</p>
-                    {groups.length === 0 ? (
+                    <p className="text-gray-600 mb-4">Select a chat to view messages:</p>
+                    {chatList.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
-                        No groups available. Groups will appear here once registered.
+                        No chats available. Start a conversation to see chats here.
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {groups.map((group) => (
+                        {chatList.map((chat) => (
                           <button
-                            key={group.id}
-                            onClick={() => setSelectedGroupForChat(group)}
-                            className="p-4 bg-gray-50 rounded-xl hover:bg-white transition-colors text-left"
+                            key={chat.id}
+                            onClick={() => {
+                              setSelectedGroupForChat(chat)
+                              setSelectedChatForExport(chat)
+                            }}
+                            className={`p-4 rounded-xl hover:bg-white transition-colors text-left border-2 ${
+                              selectedChatForExport?.id === chat.id 
+                                ? 'border-primary-500 bg-primary-50' 
+                                : 'bg-gray-50 border-gray-200'
+                            }`}
                           >
-                            <h3 className="font-bold text-gray-800">{group.name}</h3>
-                            <p className="text-sm text-gray-600 mt-1">Click to start chatting</p>
+                            <h3 className="font-bold text-gray-800">
+                              {chat.type === 'group' ? chat.groupName : chat.userName}
+                            </h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {chat.type === 'group' ? 'Group Chat' : 'Direct Message'}
+                            </p>
+                            {chat.lastMessage && (
+                              <p className="text-xs text-gray-500 mt-1 truncate">
+                                {chat.lastMessage}
+                              </p>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -559,15 +785,33 @@ function AgentCommunications() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                       <div>
-                        <h3 className="font-bold text-gray-800">{selectedGroupForChat.name}</h3>
-                        <p className="text-sm text-gray-600">Chat with group members</p>
+                        <h3 className="font-bold text-gray-800">
+                          {selectedGroupForChat.type === 'group' ? selectedGroupForChat.groupName : selectedGroupForChat.userName}
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          {selectedGroupForChat.type === 'group' ? 'Group Chat' : 'Direct Message'}
+                        </p>
                       </div>
-                      <button
-                        onClick={() => setSelectedGroupForChat(null)}
-                        className="btn-secondary text-sm"
-                      >
-                        Back to Groups
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedChatForExport(selectedGroupForChat)
+                            handleExportMessages()
+                          }}
+                          className="btn-secondary text-sm flex items-center gap-2"
+                        >
+                          <Download size={16} /> Export
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedGroupForChat(null)
+                            setSelectedChatForExport(null)
+                          }}
+                          className="btn-secondary text-sm"
+                        >
+                          Back to Chats
+                        </button>
+                      </div>
                     </div>
 
                     <div className="h-96 overflow-y-auto border border-gray-200 rounded-xl p-4 space-y-4">
@@ -681,19 +925,41 @@ function AgentCommunications() {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Recipients
+                      Send To
                     </label>
                     <select
-                      value={newMessage.recipients}
-                      onChange={(e) => setNewMessage({ ...newMessage, recipients: e.target.value })}
+                      value={newMessage.recipientType}
+                      onChange={(e) => setNewMessage({ ...newMessage, recipientType: e.target.value, recipientId: '' })}
                       className="input-field"
                     >
-                      <option value="all">All Groups</option>
-                      {groups.map(group => (
-                        <option key={group.id} value={group.id}>{group.name}</option>
-                      ))}
+                      <option value="all">All Groups (Broadcast)</option>
+                      <option value="group">Specific Group</option>
+                      <option value="user">Specific User</option>
                     </select>
                   </div>
+                  {(newMessage.recipientType === 'group' || newMessage.recipientType === 'user') && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        {newMessage.recipientType === 'group' ? 'Select Group' : 'Select User'}
+                      </label>
+                      <select
+                        value={newMessage.recipientId}
+                        onChange={(e) => setNewMessage({ ...newMessage, recipientId: e.target.value })}
+                        className="input-field"
+                      >
+                        <option value="">Select {newMessage.recipientType === 'group' ? 'Group' : 'User'}</option>
+                        {newMessage.recipientType === 'group' ? (
+                          groups.map(group => (
+                            <option key={group.id} value={group.id}>{group.name}</option>
+                          ))
+                        ) : (
+                          users.map(user => (
+                            <option key={user.id} value={user.id}>{user.name} ({user.role})</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Schedule Date (Optional)

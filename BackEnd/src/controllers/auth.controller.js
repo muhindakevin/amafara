@@ -1,45 +1,281 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { User } = require('../models');
 const { generateOTP, generateOTPExpiry, isOTPExpired } = require('../utils/otpGenerator');
 const { sendOTP, sendRegistrationConfirmation } = require('../notifications/smsService');
-const { sendWelcomeEmail, sendOtpEmail } = require('../notifications/emailService');
+const { sendWelcomeEmail, sendOtpEmail, sendPasswordResetEmail } = require('../notifications/emailService');
 const { logAction } = require('../utils/auditLogger');
+
 /**
- * Forgot Password (simulation)
+ * Forgot Password - Generate reset token and send email
  * POST /api/auth/forgot
  */
 const forgotPassword = async (req, res) => {
   try {
     const { identifier } = req.body;
-    if (!identifier) return res.status(400).json({ success: false, message: 'Email or phone is required' });
-    const where = identifier.includes('@') ? { email: identifier } : { phone: identifier };
+    if (!identifier) {
+      return res.status(400).json({ success: false, message: 'Email or phone is required' });
+    }
+
+    // Normalize identifier
+    const normalizedIdentifier = identifier.includes('@')
+      ? identifier.toLowerCase().trim()
+      : identifier.trim();
+
+    const where = normalizedIdentifier.includes('@')
+      ? { email: normalizedIdentifier }
+      : { phone: normalizedIdentifier };
+
     const user = await User.findOne({ where });
-    if (!user) return res.status(200).json({ success: true, message: 'If the account exists, a reset link/code has been sent.' });
-    logAction(user.id, 'FORGOT_PASSWORD_REQUEST', 'User', user.id, {}, req);
-    return res.json({ success: true, message: 'If the account exists, a reset link/code has been sent.' });
+
+    // Always return success message for security (don't reveal if user exists)
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: 'If the account exists, a password reset link has been sent to your email.'
+      });
+    }
+
+    // Only send reset email if user has an email address
+    if (!user.email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password reset is only available for accounts with an email address. Please contact support.'
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+    // Save reset token to user
+    user.resetToken = resetToken;
+    user.resetTokenExpiry = resetTokenExpiry;
+    await user.save();
+
+    // Generate reset URL - ALWAYS use port 3000 (NEVER 5173)
+    // Force port 3000 regardless of environment variables
+    let frontendUrl = 'http://localhost:3000';
+
+    // Only use environment variable if it's explicitly set AND doesn't contain 5173
+    if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes(':5173')) {
+      frontendUrl = process.env.FRONTEND_URL;
+    } else if (process.env.CORS_ORIGIN && !process.env.CORS_ORIGIN.includes(':5173')) {
+      frontendUrl = process.env.CORS_ORIGIN;
+    }
+
+    // FORCE port 3000 - replace any port with 3000
+    if (frontendUrl.includes('localhost')) {
+      frontendUrl = frontendUrl.replace(/localhost:\d+/, 'localhost:3000');
+      if (!frontendUrl.includes(':')) {
+        frontendUrl = 'http://localhost:3000';
+      }
+    }
+
+    // Final safety check - if somehow it still has 5173, force it to 3000
+    if (frontendUrl.includes(':5173')) {
+      frontendUrl = frontendUrl.replace(':5173', ':3000');
+      console.warn(`[WARN] Forced port change from 5173 to 3000`);
+    }
+
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
+
+    // Log the reset URL in development for debugging
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[DEV] Password reset URL generated: ${resetUrl}`);
+      console.log(`[DEV] Frontend URL used: ${frontendUrl}`);
+      console.log(`[DEV] If link doesn't work, go to: http://localhost:3000/reset-password and enter token manually`);
+    }
+
+    // Send reset email - try to send immediately
+    let emailSent = false;
+    let emailError = null;
+    try {
+      const emailResult = await sendPasswordResetEmail(user.email, user.name, resetToken, resetUrl, user.id);
+      emailSent = emailResult?.success === true;
+      if (!emailSent) {
+        emailError = emailResult?.message || 'Email service returned failure';
+        console.error('Password reset email failed:', emailError);
+      } else {
+        console.log(`Password reset email sent successfully to ${user.email}`);
+      }
+    } catch (emailErr) {
+      emailError = emailErr?.message || emailErr?.toString() || 'Unknown email error';
+      console.error('Password reset email send error:', emailError);
+      // Log full error details in development
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Full email error stack:', emailErr?.stack || emailErr);
+        // Check if email service is configured
+        const hasBirdConfig = !!(process.env.BIRD_API_KEY && process.env.BIRD_SENDER_EMAIL);
+        const hasSmtpConfig = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+        if (!hasBirdConfig && !hasSmtpConfig) {
+          console.error('⚠️  EMAIL SERVICE NOT CONFIGURED!');
+          console.error('   Please configure either:');
+          console.error('   - BIRD_API_KEY and BIRD_SENDER_EMAIL (for Bird.com), or');
+          console.error('   - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (for SMTP)');
+        }
+      }
+    }
+
+    // If email failed in production, still return success for security (don't reveal if email failed)
+    // But log the error for admin review
+    if (!emailSent && process.env.NODE_ENV === 'production') {
+      console.error(`[PROD] Password reset email failed for user ${user.id} (${user.email}): ${emailError}`);
+    }
+
+    // Log action in background
+    setImmediate(() => {
+      logAction(user.id, 'FORGOT_PASSWORD_REQUEST', 'User', user.id, {}, req).catch(err => {
+        console.error('Failed to log audit action:', err);
+      });
+    });
+
+    // Log reset token in non-production for debugging
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[DEV] Reset token for ${user.email}: ${resetToken}`);
+      console.log(`[DEV] Reset URL: ${resetUrl}`);
+    }
+
+    return res.json({
+      success: true,
+      message: 'If the account exists, a password reset link has been sent to your email.',
+      devResetUrl: process.env.NODE_ENV !== 'production' ? resetUrl : undefined,
+      // Include frontend URL info for debugging
+      frontendUrl: process.env.NODE_ENV !== 'production' ? frontendUrl : undefined
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to process request', error: error.message });
+    console.error('Forgot password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to process request',
+      error: error.message
+    });
   }
 };
 
 /**
- * Reset Password (simulation)
+ * Verify Reset Token
+ * GET /api/auth/verify-reset-token?token=xxx&email=xxx
+ */
+const verifyResetToken = async (req, res) => {
+  try {
+    const { token, email } = req.query;
+
+    if (!token || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and email are required'
+      });
+    }
+
+    const user = await User.findOne({
+      where: {
+        email: email.toLowerCase().trim(),
+        resetToken: token
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Check if token is expired
+    if (!user.resetTokenExpiry || new Date() > new Date(user.resetTokenExpiry)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset token has expired. Please request a new one.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Reset token is valid'
+    });
+  } catch (error) {
+    console.error('Verify reset token error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify token',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Reset Password - Validate token and update password
  * POST /api/auth/reset
  */
 const resetPassword = async (req, res) => {
   try {
-    const { identifier, newPassword } = req.body;
-    if (!identifier || !newPassword) return res.status(400).json({ success: false, message: 'Identifier and new password required' });
-    const where = identifier.includes('@') ? { email: identifier } : { phone: identifier };
-    const user = await User.findOne({ where });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const { token, email, newPassword } = req.body;
+
+    if (!token || !email || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token, email, and new password are required'
+      });
+    }
+
+    // Validate password strength using system settings
+    const { validatePassword } = require('../utils/passwordValidator');
+    const passwordValidation = await validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: passwordValidation.message
+      });
+    }
+
+    const user = await User.findOne({
+      where: {
+        email: email.toLowerCase().trim(),
+        resetToken: token
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Check if token is expired
+    if (!user.resetTokenExpiry || new Date() > new Date(user.resetTokenExpiry)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset token has expired. Please request a new one.'
+      });
+    }
+
+    // Update password and clear reset token
     user.password = await bcrypt.hash(newPassword, 10);
+    user.resetToken = null;
+    user.resetTokenExpiry = null;
     await user.save();
-    logAction(user.id, 'PASSWORD_RESET', 'User', user.id, {}, req);
-    return res.json({ success: true, message: 'Password has been reset successfully' });
+
+    // Log action in background
+    setImmediate(() => {
+      logAction(user.id, 'PASSWORD_RESET', 'User', user.id, {}, req).catch(err => {
+        console.error('Failed to log audit action:', err);
+      });
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password has been reset successfully. You can now log in with your new password.'
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to reset password', error: error.message });
+    console.error('Reset password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to reset password',
+      error: error.message
+    });
   }
 };
 /**
@@ -66,6 +302,13 @@ const passwordLogin = async (req, res) => {
     }
 
     // Only approved (active) users may proceed to OTP
+    if (user.status === 'burned') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is temporarily burned contact group admin'
+      });
+    }
+
     if (user.status !== 'active') {
       return res.status(403).json({ success: false, message: 'Your account is awaiting approval from your Group Admin.' });
     }
@@ -256,10 +499,22 @@ const verifyOTP = async (req, res) => {
 
     // Generate JWT token
     const jwtSecret = process.env.JWT_SECRET || 'umurenge_wallet_secret_key_change_in_production_2024';
+    // Get session timeout from system settings
+    const { Setting } = require('../models');
+    let sessionTimeoutMinutes = 30; // Default
+    try {
+      const timeoutSetting = await Setting.findOne({ where: { key: 'system_sessionTimeout' } });
+      if (timeoutSetting) {
+        sessionTimeoutMinutes = parseInt(timeoutSetting.value) || 30;
+      }
+    } catch (error) {
+      console.error('[verifyOTP] Error getting session timeout:', error);
+    }
+
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       jwtSecret,
-      { expiresIn: '7d' }
+      { expiresIn: `${sessionTimeoutMinutes}m` }
     );
 
     // Send welcome notification if first login
@@ -290,7 +545,8 @@ const verifyOTP = async (req, res) => {
           groupId: user.groupId,
           totalSavings: user.totalSavings,
           creditScore: user.creditScore,
-          language: user.language
+          language: user.language,
+          permissions: user.permissions
         }
       }
     });
@@ -311,7 +567,7 @@ const verifyOTP = async (req, res) => {
 const getCurrentUser = async (req, res) => {
   try {
     const { Contribution } = require('../models');
-    
+
     // Fetch user with group information
     const user = await User.findByPk(req.user.id, {
       attributes: { exclude: ['password', 'otp', 'otpExpiry'] },
@@ -347,6 +603,54 @@ const getCurrentUser = async (req, res) => {
       });
     }
 
+    // Fetch user settings (2FA, notifications, etc.)
+    const { Setting } = require('../models');
+    const twoFactorSetting = await Setting.findOne({
+      where: { key: `user_${user.id}_twoFactorEnabled` }
+    });
+    const biometricSetting = await Setting.findOne({
+      where: { key: `user_${user.id}_biometricEnabled` }
+    });
+    const notificationSetting = await Setting.findOne({
+      where: { key: `user_${user.id}_notificationPreferences` }
+    });
+
+    let twoFactorEnabled = false;
+    let biometricEnabled = false;
+    let notificationPreferences = {
+      emailNotifications: true,
+      smsNotifications: true,
+      pushNotifications: true,
+      contributionReminders: true,
+      loanReminders: true,
+      groupAnnouncements: true,
+      paymentConfirmations: true
+    };
+
+    if (twoFactorSetting) {
+      try {
+        twoFactorEnabled = JSON.parse(twoFactorSetting.value);
+      } catch (e) {
+        twoFactorEnabled = false;
+      }
+    }
+
+    if (biometricSetting) {
+      try {
+        biometricEnabled = JSON.parse(biometricSetting.value);
+      } catch (e) {
+        biometricEnabled = false;
+      }
+    }
+
+    if (notificationSetting) {
+      try {
+        notificationPreferences = JSON.parse(notificationSetting.value);
+      } catch (e) {
+        // Use defaults if parsing fails
+      }
+    }
+
     // Send response immediately with calculated totalSavings
     res.json({
       success: true,
@@ -363,6 +667,14 @@ const getCurrentUser = async (req, res) => {
         language: user.language,
         status: user.status,
         nationalId: user.nationalId,
+        occupation: user.occupation,
+        address: user.address,
+        dateOfBirth: user.dateOfBirth,
+        profileImage: user.profileImage,
+        permissions: user.permissions,
+        twoFactorEnabled,
+        biometricEnabled,
+        notificationPreferences,
         group: user.group ? {
           id: user.group.id,
           name: user.group.name,
@@ -394,6 +706,7 @@ module.exports = {
   demoLogin,
   passwordLogin,
   forgotPassword,
+  verifyResetToken,
   resetPassword
 };
 

@@ -1,22 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { Users, CheckCircle, XCircle, Eye, Search, Filter, Calendar, Phone, Mail, MapPin, Briefcase, User } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 import useApiState from '../hooks/useApiState'
+import { UserContext } from '../App'
+import { PERMISSIONS, hasPermission } from '../utils/permissions'
 
 function GroupAdminMemberApplications() {
+  const { user } = useContext(UserContext)
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
   const [filterStatus, setFilterStatus] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedApplicant, setSelectedApplicant] = useState(null)
   const [showApplicantDetails, setShowApplicantDetails] = useState(false)
 
   const [applicants, setApplicants] = useState([])
+  const [groupId, setGroupId] = useState(null)
   const { data: summary, setData: setSummary, loading, wrap } = useApiState({ total: 0, pending: 0, approved: 0, rejected: 0 })
 
-  useEffect(() => {
-    wrap(async () => {
+  const loadApplications = async () => {
+    try {
       const me = await api.get('/auth/me')
       const gid = me.data?.data?.groupId
+      if (!gid) return
+
+      setGroupId(gid)
       const res = await api.get('/member-applications', { params: { status: 'all', groupId: gid } })
       const list = (res.data?.data || []).map(a => ({
         id: a.id,
@@ -37,6 +47,7 @@ function GroupAdminMemberApplications() {
         applicationDate: a.createdAt ? new Date(a.createdAt).toISOString().split('T')[0] : '',
         status: a.status,
         motivation: a.reason || '',
+        rejectionReason: a.rejectionReason || '',
         bankAccount: '',
         bankName: '',
         referralSource: ''
@@ -44,16 +55,24 @@ function GroupAdminMemberApplications() {
       setApplicants(list)
       setSummary({
         total: list.length,
-        pending: list.filter(x=>x.status==='pending').length,
-        approved: list.filter(x=>x.status==='approved').length,
-        rejected: list.filter(x=>x.status==='rejected').length
+        pending: list.filter(x => x.status === 'pending').length,
+        approved: list.filter(x => x.status === 'approved').length,
+        rejected: list.filter(x => x.status === 'rejected').length
       })
+    } catch (error) {
+      console.error('[GroupAdminMemberApplications] Error loading applications:', error)
+    }
+  }
+
+  useEffect(() => {
+    wrap(async () => {
+      await loadApplications()
     })
   }, [])
 
   const filteredApplicants = applicants.filter(applicant => {
     const matchesStatus = filterStatus === 'all' || applicant.status === filterStatus
-    const matchesSearch = 
+    const matchesSearch =
       applicant.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       applicant.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       applicant.phone.includes(searchTerm) ||
@@ -80,19 +99,40 @@ function GroupAdminMemberApplications() {
   }
 
   const handleApproveApplicant = async (applicantId) => {
+    if (!window.confirm(t('confirmApproveApplication', { defaultValue: 'Are you sure you want to approve this application? The user will receive a welcome email and can log in immediately.' }))) {
+      return
+    }
+
     try {
-      await api.put(`/member-applications/${applicantId}/approve`)
-      setApplicants(prev => prev.map(a => a.id === applicantId ? { ...a, status: 'approved' } : a))
+      const response = await api.put(`/member-applications/${applicantId}/approve`)
+      if (response.data?.success) {
+        alert('Application approved successfully! The user has been notified via email and can now log in.')
+        // Reload applications to get updated data
+        await loadApplications()
+      }
     } catch (e) {
+      console.error('[GroupAdminMemberApplications] Error approving:', e)
       alert(e.response?.data?.message || 'Failed to approve application')
     }
   }
 
   const handleRejectApplicant = async (applicantId) => {
+    const reason = window.prompt('Please provide a reason for rejection (optional):')
+    if (reason === null) return // User cancelled
+
+    if (!window.confirm('Are you sure you want to reject this application? The user will be notified via email.')) {
+      return
+    }
+
     try {
-      await api.put(`/member-applications/${applicantId}/reject`, { reason: 'Not eligible' })
-      setApplicants(prev => prev.map(a => a.id === applicantId ? { ...a, status: 'rejected' } : a))
+      const response = await api.put(`/member-applications/${applicantId}/reject`, { reason: reason || 'Not eligible' })
+      if (response.data?.success) {
+        alert('Application rejected. The user has been notified via email.')
+        // Reload applications to get updated data
+        await loadApplications()
+      }
     } catch (e) {
+      console.error('[GroupAdminMemberApplications] Error rejecting:', e)
       alert(e.response?.data?.message || 'Failed to reject application')
     }
   }
@@ -119,8 +159,8 @@ function GroupAdminMemberApplications() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Member Applications</h1>
-            <p className="text-gray-600 mt-1">Review and approve new member applications</p>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('memberApplications', { defaultValue: 'Member Applications' })}</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">{t('reviewApproveApplications', { defaultValue: 'Review and approve new member applications' })}</p>
           </div>
         </div>
 
@@ -129,8 +169,8 @@ function GroupAdminMemberApplications() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Applications</p>
-                <p className="text-2xl font-bold text-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalApplications', { defaultValue: 'Total Applications' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
                   {applicants.length}
                 </p>
               </div>
@@ -141,8 +181,8 @@ function GroupAdminMemberApplications() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Pending Review</p>
-                <p className="text-2xl font-bold text-yellow-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('pendingReview', { defaultValue: 'Pending Review' })}</p>
+                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
                   {applicants.filter(a => a.status === 'pending').length}
                 </p>
               </div>
@@ -153,8 +193,8 @@ function GroupAdminMemberApplications() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Approved</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('approved', { defaultValue: 'Approved' })}</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {applicants.filter(a => a.status === 'approved').length}
                 </p>
               </div>
@@ -165,8 +205,8 @@ function GroupAdminMemberApplications() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Rejected</p>
-                <p className="text-2xl font-bold text-red-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('rejected', { defaultValue: 'Rejected' })}</p>
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                   {applicants.filter(a => a.status === 'rejected').length}
                 </p>
               </div>
@@ -180,7 +220,7 @@ function GroupAdminMemberApplications() {
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Search Applicants
+                {t('searchApplicants', { defaultValue: 'Search Applicants' })}
               </label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -188,24 +228,24 @@ function GroupAdminMemberApplications() {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, phone, or email..."
-                  className="input-field pl-10"
+                  placeholder={t('searchByNamePhoneEmail', { defaultValue: 'Search by name, phone, or email...' })}
+                  className="input-field pl-10 dark:bg-gray-700 dark:text-white dark:border-gray-600"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Filter by Status
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                {t('filterByStatus')}
               </label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="input-field"
+                className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
               >
-                <option value="all">All Applications</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
+                <option value="all">{t('allApplications', { defaultValue: 'All Applications' })}</option>
+                <option value="pending">{tCommon('pending')}</option>
+                <option value="approved">{t('approved')}</option>
+                <option value="rejected">{t('rejected')}</option>
               </select>
             </div>
           </div>
@@ -214,8 +254,8 @@ function GroupAdminMemberApplications() {
         {/* Applications List */}
         <div className="card">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800">
-              Applications ({loading ? 0 : filteredApplicants.length})
+            <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+              {t('applications', { defaultValue: 'Applications' })} ({loading ? 0 : filteredApplicants.length})
             </h2>
             <div className="flex gap-2">
               <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -226,9 +266,9 @@ function GroupAdminMemberApplications() {
 
           <div className="space-y-4">
             {loading ? (
-              <div className="text-center py-8 text-gray-500">Fetching data…</div>
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">{t('fetchingData', { defaultValue: 'Fetching data…' })}</div>
             ) : filteredApplicants.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">No records found</div>
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">{t('noRecordsFound', { defaultValue: 'No records found' })}</div>
             ) : filteredApplicants.map((applicant) => (
               <div
                 key={applicant.id}
@@ -284,7 +324,7 @@ function GroupAdminMemberApplications() {
                   >
                     <Eye size={16} /> View Details
                   </button>
-                  {applicant.status === 'pending' && (
+                  {applicant.status === 'pending' && hasPermission(user, PERMISSIONS.MANAGE_USERS) && (
                     <>
                       <button
                         onClick={() => handleApproveApplicant(applicant.id)}
@@ -443,7 +483,7 @@ function GroupAdminMemberApplications() {
                   >
                     Close
                   </button>
-                  {selectedApplicant.status === 'pending' && (
+                  {selectedApplicant.status === 'pending' && hasPermission(user, PERMISSIONS.MANAGE_USERS) && (
                     <>
                       <button
                         onClick={() => {

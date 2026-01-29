@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const { createMemberApplication, listMemberApplications, approveMemberApplication, rejectMemberApplication } = require('../controllers/memberApplication.controller');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize, checkPermission } = require('../middleware/auth.middleware');
 
 // Rate limiter for signup - more lenient to allow retries
 const signupLimiter = rateLimit({
@@ -18,9 +18,9 @@ const signupLimiter = rateLimit({
 router.post('/', signupLimiter, createMemberApplication);
 
 // Admin routes
-router.get('/', authenticate, authorize('Group Admin', 'System Admin'), listMemberApplications);
-router.put('/:id/approve', authenticate, authorize('Group Admin', 'System Admin'), approveMemberApplication);
-router.put('/:id/reject', authenticate, authorize('Group Admin', 'System Admin'), rejectMemberApplication);
+router.get('/', authenticate, authorize('Group Admin', 'System Admin'), checkPermission('manage_users'), listMemberApplications);
+router.put('/:id/approve', authenticate, authorize('Group Admin', 'System Admin'), checkPermission('manage_users'), approveMemberApplication);
+router.put('/:id/reject', authenticate, authorize('Group Admin', 'System Admin'), checkPermission('manage_users'), rejectMemberApplication);
 
 module.exports = router;
 

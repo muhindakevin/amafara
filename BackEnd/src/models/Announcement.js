@@ -7,7 +7,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     groupId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true, // Allow null for system-wide announcements
       references: {
         model: 'Groups',
         key: 'id'

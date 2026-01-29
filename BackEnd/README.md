@@ -1,4 +1,4 @@
-# UMURENGE WALLET - Backend API
+# IKIMINA WALLET - Backend API
 
 Complete backend API for the Umurenge Wallet digital microfinance platform.
 

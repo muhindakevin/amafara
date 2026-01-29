@@ -1,4 +1,4 @@
-const { Contribution, User, Group, Transaction, Notification, sequelize } = require('../models');
+const { Contribution, User, Group, Transaction, Notification, Document, sequelize } = require('../models');
 const { sendContributionConfirmation, sendSMS } = require('../notifications/smsService');
 const { sendContributionSummary, sendEmail } = require('../notifications/emailService');
 const { logAction } = require('../utils/auditLogger');
@@ -7,6 +7,9 @@ const { Op } = require('sequelize');
 /**
  * Make a contribution
  * POST /api/contributions
+ * 
+ * IMPORTANT: Contributions are automatically approved and immediately added to member's totalSavings.
+ * No approval workflow is required - contributions are instantly reflected in the database.
  */
 const makeContribution = async (req, res) => {
   try {
@@ -46,6 +49,19 @@ const makeContribution = async (req, res) => {
       });
     }
 
+    // Get group contribution settings and validate amount
+    const group = await Group.findByPk(member.groupId);
+    if (group) {
+      const minimumAmount = parseFloat(group.contributionAmount || 0);
+      if (minimumAmount > 0 && contributionAmount < minimumAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `Contribution amount must be at least ${minimumAmount.toLocaleString()} RWF. The minimum contribution for this group is ${minimumAmount.toLocaleString()} RWF.`
+        });
+      }
+      // Note: Maximum amount validation can be added if maximumAmount field is added to Group model
+    }
+
     // Generate receipt number with better uniqueness
     const receiptNumber = `REC-${Date.now()}-${memberId}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -65,7 +81,8 @@ const makeContribution = async (req, res) => {
         });
       }
 
-      // Create contribution with approved status (auto-approved) within transaction
+      // Create contribution with approved status (AUTO-APPROVED - no approval needed)
+      // Contribution is immediately added to member's totalSavings within the same transaction
       let contribution;
       let attempts = 0;
       let currentReceiptNumber = receiptNumber;
@@ -98,19 +115,64 @@ const makeContribution = async (req, res) => {
         }
       }
 
-      // Update member savings within transaction
+      // Update member savings within transaction - USE DIRECT SQL TO ENSURE DATABASE UPDATE
       const currentTotalSavings = parseFloat(member.totalSavings || 0);
       const newTotalSavings = currentTotalSavings + contributionAmount;
+      
+      // Method 1: Update using Sequelize (for ORM consistency)
       member.totalSavings = newTotalSavings;
       await member.save({ transaction: dbTransaction });
-      console.log(`[makeContribution] Updated member totalSavings: ${currentTotalSavings} -> ${newTotalSavings}`);
+      
+      // Method 2: Also update using DIRECT SQL to ensure database is definitely updated
+      await sequelize.query(`
+        UPDATE Users 
+        SET totalSavings = :newTotalSavings, updatedAt = :updatedAt
+        WHERE id = :memberId
+      `, {
+        replacements: {
+          newTotalSavings: newTotalSavings,
+          updatedAt: new Date(),
+          memberId: memberId
+        },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction: dbTransaction
+      });
+      
+      console.log(`[makeContribution] Updated member totalSavings in database: ${currentTotalSavings} -> ${newTotalSavings} (Member ID: ${memberId})`);
+      
+      // Verify the update by reloading member
+      await member.reload({ transaction: dbTransaction });
+      const verifiedTotalSavings = parseFloat(member.totalSavings || 0);
+      if (Math.abs(verifiedTotalSavings - newTotalSavings) > 0.01) {
+        console.error(`[makeContribution] WARNING: totalSavings mismatch! Expected: ${newTotalSavings}, Got: ${verifiedTotalSavings}`);
+      } else {
+        console.log(`[makeContribution] Verified: Member totalSavings is correctly set to ${verifiedTotalSavings} in database`);
+      }
 
-      // Update group savings within transaction
+      // Update group savings within transaction - USE DIRECT SQL TO ENSURE DATABASE UPDATE
       const currentGroupSavings = parseFloat(group.totalSavings || 0);
       const newGroupSavings = currentGroupSavings + contributionAmount;
+      
+      // Method 1: Update using Sequelize
       group.totalSavings = newGroupSavings;
       await group.save({ transaction: dbTransaction });
-      console.log(`[makeContribution] Updated group totalSavings: ${currentGroupSavings} -> ${newGroupSavings}`);
+      
+      // Method 2: Also update using DIRECT SQL to ensure database is definitely updated
+      await sequelize.query(`
+        UPDATE Groups 
+        SET totalSavings = :newGroupSavings, updatedAt = :updatedAt
+        WHERE id = :groupId
+      `, {
+        replacements: {
+          newGroupSavings: newGroupSavings,
+          updatedAt: new Date(),
+          groupId: member.groupId
+        },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction: dbTransaction
+      });
+      
+      console.log(`[makeContribution] Updated group totalSavings in database: ${currentGroupSavings} -> ${newGroupSavings} (Group ID: ${member.groupId})`);
 
       // Create transaction record within transaction
       await Transaction.create({
@@ -135,6 +197,20 @@ const makeContribution = async (req, res) => {
 
       // Log action (outside transaction)
       logAction(memberId, 'CONTRIBUTION_SUBMITTED', 'Contribution', contribution.id, { amount: contributionAmount, paymentMethod, status: 'approved' }, req);
+
+      // Auto-create document for contribution
+      setImmediate(async () => {
+        try {
+          const { autoCreateDocumentFromContribution } = require('./documentation.controller');
+          const fileUrl = `/contributions/${contribution.id}`;
+          const fileName = `contribution-${contribution.id}-${currentReceiptNumber}.txt`;
+          await autoCreateDocumentFromContribution(contribution.id, fileUrl, fileName);
+          console.log(`[makeContribution] Auto-created document for contribution ${contribution.id}`);
+        } catch (docError) {
+          console.error('[makeContribution] Error creating document:', docError);
+          // Don't fail the request if document creation fails
+        }
+      });
 
       // Create in-app notifications for Group Admin, Secretary, and Cashier
       let admins = [];
@@ -183,33 +259,87 @@ const makeContribution = async (req, res) => {
 
       console.log(`[makeContribution] Verification successful. Contribution ${contribution.id} exists in database with status: ${verifyContribution.status}`);
 
-      // Emit Socket.io event for real-time savings updates
+      // Reload member and group from database to get the latest totalSavings values (after SQL update)
+      await member.reload();
+      const finalMemberTotalSavings = parseFloat(member.totalSavings || 0);
+      
+      await group.reload();
+      const finalGroupTotalSavings = parseFloat(group.totalSavings || 0);
+      
+      console.log(`[makeContribution] Final values from database - Member: ${finalMemberTotalSavings} RWF, Group: ${finalGroupTotalSavings} RWF`);
+      
+      // Verify that the contribution is reflected in totalSavings
+      // If there's a mismatch, recalculate from contributions and fix it
+      const verificationCheck = Math.abs(finalMemberTotalSavings - newTotalSavings);
+      if (verificationCheck > 0.01) {
+        console.warn(`[makeContribution] WARNING: Mismatch detected after commit! Expected: ${newTotalSavings}, Got: ${finalMemberTotalSavings}`);
+        console.log(`[makeContribution] Recalculating from approved contributions to fix...`);
+        
+        // Recalculate from all approved contributions
+        const allApprovedContributions = await Contribution.findAll({
+          where: {
+            memberId: memberId,
+            status: 'approved'
+          },
+          attributes: ['amount']
+        });
+        
+        const recalculatedTotalSavings = allApprovedContributions.reduce((sum, c) => {
+          const amount = parseFloat(c.amount || 0);
+          return sum + (isNaN(amount) ? 0 : amount);
+        }, 0);
+        
+        if (Math.abs(recalculatedTotalSavings - finalMemberTotalSavings) > 0.01) {
+          console.log(`[makeContribution] Fixing totalSavings: ${finalMemberTotalSavings} -> ${recalculatedTotalSavings}`);
+          
+          // Fix using direct SQL
+          await sequelize.query(`
+            UPDATE Users 
+            SET totalSavings = :recalculatedTotalSavings, updatedAt = :updatedAt
+            WHERE id = :memberId
+          `, {
+            replacements: {
+              recalculatedTotalSavings: recalculatedTotalSavings,
+              updatedAt: new Date(),
+              memberId: memberId
+            },
+            type: sequelize.QueryTypes.UPDATE
+          });
+          
+          await member.reload();
+          const fixedTotalSavings = parseFloat(member.totalSavings || 0);
+          console.log(`[makeContribution] Fixed totalSavings to: ${fixedTotalSavings} RWF`);
+        }
+      }
+
+      // Emit Socket.io event for real-time savings updates (use final reloaded values from database)
       try {
         const io = req.app.get('io');
         if (io) {
           // Emit to all users in the group
           io.to(`savings:${member.groupId}`).emit('savings_updated', {
             groupId: member.groupId,
-            totalSavings: newGroupSavings,
+            totalSavings: finalGroupTotalSavings,
             memberId: memberId,
-            memberTotalSavings: newTotalSavings,
+            memberTotalSavings: finalMemberTotalSavings,
             contributionAmount: contributionAmount
           });
-          console.log(`[makeContribution] Emitted savings_updated event for group ${member.groupId}`);
+          console.log(`[makeContribution] Emitted savings_updated event for group ${member.groupId} with final values`);
         }
       } catch (socketError) {
         console.warn('[makeContribution] Failed to emit Socket.io event:', socketError);
         // Don't fail the contribution if Socket.io fails
       }
-
-      // Send response with fully persisted contribution data
+      
+      // Send response with fully persisted contribution data and updated savings from database
       res.status(201).json({
         success: true,
         message: 'Contribution recorded successfully!',
         data: {
           ...contribution.toJSON(),
-          memberTotalSavings: newTotalSavings,
-          groupTotalSavings: newGroupSavings
+          memberTotalSavings: finalMemberTotalSavings, // Final value from database after SQL update
+          groupTotalSavings: finalGroupTotalSavings,   // Final value from database after SQL update
+          contributionAmount: contributionAmount
         }
       });
 
@@ -374,7 +504,8 @@ const getAllContributions = async (req, res) => {
 
     let whereClause = {};
     
-    if (user.role === 'Group Admin' && user.groupId) {
+    // Group Admin and Cashier can see contributions for their group
+    if ((user.role === 'Group Admin' || user.role === 'Cashier') && user.groupId) {
       whereClause.groupId = user.groupId;
     } else if (groupId) {
       whereClause.groupId = groupId;
@@ -440,22 +571,71 @@ const approveContribution = async (req, res) => {
     contribution.approvalDate = new Date();
     await contribution.save();
 
-    // Update member savings
+    // Update member savings - USE DIRECT SQL TO ENSURE DATABASE UPDATE
     const member = await User.findByPk(contribution.memberId);
-    member.totalSavings = parseFloat(member.totalSavings) + parseFloat(contribution.amount);
+    const currentMemberSavings = parseFloat(member.totalSavings || 0);
+    const newMemberSavings = currentMemberSavings + parseFloat(contribution.amount);
+    
+    // Method 1: Update using Sequelize
+    member.totalSavings = newMemberSavings;
     await member.save();
+    
+    // Method 2: Also update using DIRECT SQL to ensure database is definitely updated
+    await sequelize.query(`
+      UPDATE Users 
+      SET totalSavings = :newTotalSavings, updatedAt = :updatedAt
+      WHERE id = :memberId
+    `, {
+      replacements: {
+        newTotalSavings: newMemberSavings,
+        updatedAt: new Date(),
+        memberId: contribution.memberId
+      },
+      type: sequelize.QueryTypes.UPDATE
+    });
+    
+    console.log(`[approveContribution] Updated member totalSavings in database: ${currentMemberSavings} -> ${newMemberSavings} (Member ID: ${contribution.memberId})`);
 
-    // Update group savings
+    // Update group savings - USE DIRECT SQL TO ENSURE DATABASE UPDATE
     const group = await Group.findByPk(contribution.groupId);
-    group.totalSavings = parseFloat(group.totalSavings) + parseFloat(contribution.amount);
+    const currentGroupSavings = parseFloat(group.totalSavings || 0);
+    const newGroupSavings = currentGroupSavings + parseFloat(contribution.amount);
+    
+    // Method 1: Update using Sequelize
+    group.totalSavings = newGroupSavings;
     await group.save();
+    
+    // Method 2: Also update using DIRECT SQL to ensure database is definitely updated
+    await sequelize.query(`
+      UPDATE Groups 
+      SET totalSavings = :newGroupSavings, updatedAt = :updatedAt
+      WHERE id = :groupId
+    `, {
+      replacements: {
+        newGroupSavings: newGroupSavings,
+        updatedAt: new Date(),
+        groupId: contribution.groupId
+      },
+      type: sequelize.QueryTypes.UPDATE
+    });
+    
+    console.log(`[approveContribution] Updated group totalSavings in database: ${currentGroupSavings} -> ${newGroupSavings} (Group ID: ${contribution.groupId})`);
 
-    // Create transaction record
+    // Reload member and group from database to get the latest totalSavings values (after SQL update)
+    await member.reload();
+    const finalMemberTotalSavings = parseFloat(member.totalSavings || 0);
+    
+    await group.reload();
+    const finalGroupTotalSavings = parseFloat(group.totalSavings || 0);
+    
+    console.log(`[approveContribution] Final values from database - Member: ${finalMemberTotalSavings} RWF, Group: ${finalGroupTotalSavings} RWF`);
+
+    // Create transaction record (use final reloaded value)
     await Transaction.create({
       userId: contribution.memberId,
       type: 'contribution',
       amount: contribution.amount,
-      balance: member.totalSavings,
+      balance: finalMemberTotalSavings,
       status: 'completed',
       referenceId: contribution.id.toString(),
       referenceType: 'Contribution',
@@ -463,11 +643,11 @@ const approveContribution = async (req, res) => {
       description: `Contribution: ${contribution.receiptNumber}`
     });
 
-    // Send notifications
+    // Send notifications (use final reloaded value)
     try {
       await sendContributionConfirmation(member.phone, member.name, contribution.amount);
       if (member.email) {
-        await sendContributionSummary(member.email, member.name, contribution.amount, member.totalSavings);
+        await sendContributionSummary(member.email, member.name, contribution.amount, finalMemberTotalSavings);
       }
     } catch (notifError) {
       console.error('Notification error:', notifError);
@@ -475,10 +655,29 @@ const approveContribution = async (req, res) => {
 
     logAction(approverId, 'CONTRIBUTION_APPROVED', 'Contribution', contribution.id, { memberId: contribution.memberId, amount: contribution.amount }, req);
 
+    // Return response with updated savings values from database
     res.json({
       success: true,
       message: 'Contribution approved successfully',
-      data: contribution
+      data: {
+        ...contribution.toJSON(),
+        memberTotalSavings: finalMemberTotalSavings,
+        groupTotalSavings: finalGroupTotalSavings
+      }
+    });
+
+    // Auto-create document for approved contribution
+    setImmediate(async () => {
+      try {
+        const { autoCreateDocumentFromContribution } = require('./documentation.controller');
+        const fileUrl = `/contributions/${contribution.id}`;
+        const fileName = `contribution-${contribution.id}-${contribution.receiptNumber || contribution.id}.txt`;
+        await autoCreateDocumentFromContribution(contribution.id, fileUrl, fileName);
+        console.log(`[approveContribution] Auto-created document for contribution ${contribution.id}`);
+      } catch (docError) {
+        console.error('[approveContribution] Error creating document:', docError);
+        // Don't fail the request if document creation fails
+      }
     });
   } catch (error) {
     console.error('Approve contribution error:', error);
@@ -539,11 +738,183 @@ const rejectContribution = async (req, res) => {
   }
 };
 
+/**
+ * Sync member totalSavings with approved contributions
+ * This function recalculates totalSavings for a member based on their approved contributions
+ * and updates the database if there's a mismatch
+ * POST /api/contributions/sync/:memberId (optional memberId, if not provided syncs all members)
+ */
+const syncMemberTotalSavings = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const { syncAll } = req.query;
+    
+    console.log('[syncMemberTotalSavings] Starting sync process...');
+    
+    let membersToSync = [];
+    
+    if (memberId) {
+      // Sync specific member
+      const member = await User.findByPk(memberId);
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Member not found'
+        });
+      }
+      membersToSync = [member];
+    } else if (syncAll === 'true' || req.user?.role === 'System Admin') {
+      // Sync all active members
+      membersToSync = await User.findAll({
+        where: {
+          status: 'active',
+          role: { [Op.in]: ['Member', 'Secretary', 'Cashier', 'Group Admin'] }
+        }
+      });
+      console.log(`[syncMemberTotalSavings] Syncing all ${membersToSync.length} members`);
+    } else {
+      // Sync current user only
+      const member = await User.findByPk(req.user.id);
+      if (member) {
+        membersToSync = [member];
+      }
+    }
+    
+    const results = [];
+    let fixedCount = 0;
+    let correctCount = 0;
+    
+    for (const member of membersToSync) {
+      try {
+        // Calculate totalSavings from approved contributions
+        const approvedContributions = await Contribution.findAll({
+          where: {
+            memberId: member.id,
+            status: 'approved'
+          },
+          attributes: ['amount']
+        });
+        
+        const calculatedTotalSavings = approvedContributions.reduce((sum, c) => {
+          const amount = parseFloat(c.amount || 0);
+          return sum + (isNaN(amount) ? 0 : amount);
+        }, 0);
+        
+        const storedTotalSavings = parseFloat(member.totalSavings || 0);
+        const difference = Math.abs(calculatedTotalSavings - storedTotalSavings);
+        
+        if (difference > 0.01) {
+          // There's a mismatch, fix it
+          console.log(`[syncMemberTotalSavings] Member ${member.id} (${member.name}): Stored=${storedTotalSavings}, Calculated=${calculatedTotalSavings}, Difference=${difference}`);
+          
+          // Update using both methods
+          member.totalSavings = calculatedTotalSavings;
+          await member.save();
+          
+          await sequelize.query(`
+            UPDATE Users 
+            SET totalSavings = :newTotalSavings, updatedAt = :updatedAt
+            WHERE id = :memberId
+          `, {
+            replacements: {
+              newTotalSavings: calculatedTotalSavings,
+              updatedAt: new Date(),
+              memberId: member.id
+            },
+            type: sequelize.QueryTypes.UPDATE
+          });
+          
+          // Update group totalSavings if member belongs to a group
+          if (member.groupId) {
+            const group = await Group.findByPk(member.groupId);
+            if (group) {
+              // Recalculate group totalSavings from all members
+              const groupMembers = await User.findAll({
+                where: {
+                  groupId: member.groupId,
+                  status: 'active'
+                },
+                attributes: ['totalSavings']
+              });
+              
+              const groupTotalSavings = groupMembers.reduce((sum, m) => {
+                return sum + parseFloat(m.totalSavings || 0);
+              }, 0);
+              
+              group.totalSavings = groupTotalSavings;
+              await group.save();
+              
+              await sequelize.query(`
+                UPDATE Groups 
+                SET totalSavings = :newGroupSavings, updatedAt = :updatedAt
+                WHERE id = :groupId
+              `, {
+                replacements: {
+                  newGroupSavings: groupTotalSavings,
+                  updatedAt: new Date(),
+                  groupId: member.groupId
+                },
+                type: sequelize.QueryTypes.UPDATE
+              });
+            }
+          }
+          
+          results.push({
+            memberId: member.id,
+            memberName: member.name,
+            storedTotalSavings,
+            calculatedTotalSavings,
+            fixed: true
+          });
+          fixedCount++;
+        } else {
+          results.push({
+            memberId: member.id,
+            memberName: member.name,
+            storedTotalSavings,
+            calculatedTotalSavings,
+            fixed: false
+          });
+          correctCount++;
+        }
+      } catch (memberError) {
+        console.error(`[syncMemberTotalSavings] Error syncing member ${member.id}:`, memberError);
+        results.push({
+          memberId: member.id,
+          memberName: member.name,
+          error: memberError.message
+        });
+      }
+    }
+    
+    console.log(`[syncMemberTotalSavings] Sync complete. Fixed: ${fixedCount}, Correct: ${correctCount}`);
+    
+    res.json({
+      success: true,
+      message: `Sync complete. Fixed ${fixedCount} member(s), ${correctCount} already correct.`,
+      data: {
+        fixedCount,
+        correctCount,
+        totalChecked: membersToSync.length,
+        results
+      }
+    });
+  } catch (error) {
+    console.error('[syncMemberTotalSavings] Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to sync member totalSavings',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   makeContribution,
   getMemberContributions,
   getAllContributions,
   approveContribution,
-  rejectContribution
+  rejectContribution,
+  syncMemberTotalSavings
 };
 

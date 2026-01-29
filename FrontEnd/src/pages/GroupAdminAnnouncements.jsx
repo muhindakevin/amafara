@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Megaphone, Plus, Edit, Trash2, Send, Calendar, Users, Bell, XCircle } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function GroupAdminAnnouncements() {
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false)
   const [showEditContribution, setShowEditContribution] = useState(false)
   const [editingAnnouncement, setEditingAnnouncement] = useState(null)
@@ -32,8 +35,8 @@ function GroupAdminAnnouncements() {
             date: a.createdAt ? new Date(a.createdAt).toISOString().split('T')[0] : '',
             time: a.createdAt ? new Date(a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
             status: a.status === 'sent' ? 'sent' : 'draft',
-            recipients: 'All Members',
-            createdBy: 'Group Admin',
+            recipients: t('allMembers', { defaultValue: 'All Members' }),
+            createdBy: t('groupAdmin', { defaultValue: 'Group Admin' }),
             sentAt: a.sentAt ? new Date(a.sentAt).toISOString() : null
           }))
           setAnnouncements(anns)
@@ -124,7 +127,7 @@ function GroupAdminAnnouncements() {
 
   const handleCreateAnnouncement = async () => {
     if (!newAnnouncement.title || !newAnnouncement.content) {
-      alert('Title and content are required')
+      alert(t('titleContentRequired', { defaultValue: 'Title and content are required' }))
       return
     }
 
@@ -142,7 +145,7 @@ function GroupAdminAnnouncements() {
           priority: newAnnouncement.priority
         })
         if (data?.success) {
-          alert('Announcement updated successfully!')
+          alert(t('announcementUpdatedSuccessfully', { defaultValue: 'Announcement updated successfully!' }))
           setShowCreateAnnouncement(false)
           setEditingAnnouncement(null)
           // Reload announcements
@@ -173,7 +176,7 @@ function GroupAdminAnnouncements() {
           priority: newAnnouncement.priority || 'medium'
         })
         if (data?.success) {
-          alert('Announcement created successfully!')
+          alert(t('announcementCreatedSuccessfully', { defaultValue: 'Announcement created successfully!' }))
           setShowCreateAnnouncement(false)
           setNewAnnouncement({
             title: '',
@@ -206,7 +209,7 @@ function GroupAdminAnnouncements() {
       }
     } catch (err) {
       console.error('Failed to create/update announcement:', err)
-      alert(err.response?.data?.message || err.message || 'Failed to save announcement. Please try again.')
+      alert(err.response?.data?.message || err.message || t('failedToSaveAnnouncement', { defaultValue: 'Failed to save announcement. Please try again.' }))
     }
   }
 
@@ -225,12 +228,12 @@ function GroupAdminAnnouncements() {
   }
 
   const handleDeleteAnnouncement = async (id) => {
-    if (!confirm('Are you sure you want to delete this announcement?')) return
+    if (!confirm(t('confirmDeleteAnnouncement', { defaultValue: 'Are you sure you want to delete this announcement?' }))) return
     
     try {
       const { data } = await api.delete(`/announcements/${id}`)
       if (data?.success) {
-        alert('Announcement deleted successfully!')
+        alert(t('announcementDeletedSuccessfully', { defaultValue: 'Announcement deleted successfully!' }))
         // Reload announcements
         const res = await api.get(`/announcements?groupId=${groupId}`)
         if (res.data?.success) {
@@ -243,8 +246,8 @@ function GroupAdminAnnouncements() {
             date: a.createdAt ? new Date(a.createdAt).toISOString().split('T')[0] : '',
             time: a.createdAt ? new Date(a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
             status: a.status === 'sent' ? 'sent' : 'draft',
-            recipients: 'All Members',
-            createdBy: 'Group Admin',
+            recipients: t('allMembers', { defaultValue: 'All Members' }),
+            createdBy: t('groupAdmin', { defaultValue: 'Group Admin' }),
             sentAt: a.sentAt ? new Date(a.sentAt).toISOString() : null
           }))
           setAnnouncements(anns)
@@ -260,7 +263,7 @@ function GroupAdminAnnouncements() {
     try {
       const { data } = await api.put(`/announcements/${id}/send`)
       if (data?.success) {
-        alert('Announcement sent to all group members!')
+        alert(t('announcementSentSuccessfully', { defaultValue: 'Announcement sent to all group members!' }))
         // Reload announcements
         const res = await api.get(`/announcements?groupId=${groupId}`)
         if (res.data?.success) {
@@ -273,8 +276,8 @@ function GroupAdminAnnouncements() {
             date: a.createdAt ? new Date(a.createdAt).toISOString().split('T')[0] : '',
             time: a.createdAt ? new Date(a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
             status: a.status === 'sent' ? 'sent' : 'draft',
-            recipients: 'All Members',
-            createdBy: 'Group Admin',
+            recipients: t('allMembers', { defaultValue: 'All Members' }),
+            createdBy: t('groupAdmin', { defaultValue: 'Group Admin' }),
             sentAt: a.sentAt ? new Date(a.sentAt).toISOString() : null
           }))
           setAnnouncements(anns)
@@ -295,11 +298,32 @@ function GroupAdminAnnouncements() {
     try {
       const { data } = await api.put(`/groups/${groupId}`, {
         contributionAmount: contributionSettings.minimumAmount,
-        contributionFrequency: 'monthly'
+        contributionFrequency: 'monthly',
+        minimumAmount: contributionSettings.minimumAmount,
+        maximumAmount: contributionSettings.maximumAmount,
+        dueDate: contributionSettings.dueDate,
+        lateFee: contributionSettings.lateFee,
+        gracePeriod: contributionSettings.gracePeriod
       })
       if (data?.success) {
-        alert('Contribution settings updated successfully!')
+        if (data.voteCreated) {
+          alert('A voting proposal has been created! Members will vote on these changes. The settings will be updated after voting completes.')
+        } else {
+          alert('Contribution settings updated successfully!')
+        }
         setShowEditContribution(false)
+        // Reload group settings
+        const groupRes = await api.get(`/groups/${groupId}`)
+        if (groupRes.data?.success) {
+          const group = groupRes.data.data
+          setContributionSettings({
+            minimumAmount: Number(group.contributionAmount || 0),
+            maximumAmount: contributionSettings.maximumAmount,
+            dueDate: contributionSettings.dueDate,
+            lateFee: contributionSettings.lateFee,
+            gracePeriod: contributionSettings.gracePeriod
+          })
+        }
       }
     } catch (err) {
       console.error('Failed to update contribution settings:', err)
@@ -313,21 +337,21 @@ function GroupAdminAnnouncements() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Announcements</h1>
-            <p className="text-gray-600 mt-1">Manage group communications and settings</p>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{t('announcements')}</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">{t('manageGroupCommunications', { defaultValue: 'Manage group communications and settings' })}</p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setShowEditContribution(true)}
               className="btn-secondary flex items-center gap-2"
             >
-              <Users size={18} /> Edit Contributions
+              <Users size={18} /> {t('editContributions', { defaultValue: 'Edit Contributions' })}
             </button>
             <button
               onClick={() => setShowCreateAnnouncement(true)}
               className="btn-primary flex items-center gap-2"
             >
-              <Plus size={18} /> New Announcement
+              <Plus size={18} /> {t('newAnnouncement', { defaultValue: 'New Announcement' })}
             </button>
           </div>
         </div>
@@ -337,8 +361,8 @@ function GroupAdminAnnouncements() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Announcements</p>
-                <p className="text-2xl font-bold text-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('totalAnnouncements', { defaultValue: 'Total Announcements' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
                   {announcements.length}
                 </p>
               </div>
@@ -349,8 +373,8 @@ function GroupAdminAnnouncements() {
           <div className="card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Sent</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('sent', { defaultValue: 'Sent' })}</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {announcements.filter(a => a.status === 'sent').length}
                 </p>
               </div>
@@ -630,8 +654,11 @@ function GroupAdminAnnouncements() {
                     </label>
                     <input
                       type="number"
-                      value={contributionSettings.minimumAmount}
-                      onChange={(e) => setContributionSettings({ ...contributionSettings, minimumAmount: parseInt(e.target.value) })}
+                      value={contributionSettings.minimumAmount || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0
+                        setContributionSettings({ ...contributionSettings, minimumAmount: val })
+                      }}
                       className="input-field"
                     />
                   </div>
@@ -642,8 +669,11 @@ function GroupAdminAnnouncements() {
                     </label>
                     <input
                       type="number"
-                      value={contributionSettings.maximumAmount}
-                      onChange={(e) => setContributionSettings({ ...contributionSettings, maximumAmount: parseInt(e.target.value) })}
+                      value={contributionSettings.maximumAmount || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0
+                        setContributionSettings({ ...contributionSettings, maximumAmount: val })
+                      }}
                       className="input-field"
                     />
                   </div>
@@ -656,8 +686,11 @@ function GroupAdminAnnouncements() {
                       type="number"
                       min="1"
                       max="31"
-                      value={contributionSettings.dueDate}
-                      onChange={(e) => setContributionSettings({ ...contributionSettings, dueDate: parseInt(e.target.value) })}
+                      value={contributionSettings.dueDate || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 1 : parseInt(e.target.value) || 1
+                        setContributionSettings({ ...contributionSettings, dueDate: Math.max(1, Math.min(31, val)) })
+                      }}
                       className="input-field"
                     />
                   </div>
@@ -668,8 +701,11 @@ function GroupAdminAnnouncements() {
                     </label>
                     <input
                       type="number"
-                      value={contributionSettings.lateFee}
-                      onChange={(e) => setContributionSettings({ ...contributionSettings, lateFee: parseInt(e.target.value) })}
+                      value={contributionSettings.lateFee || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0
+                        setContributionSettings({ ...contributionSettings, lateFee: val })
+                      }}
                       className="input-field"
                     />
                   </div>
@@ -680,8 +716,11 @@ function GroupAdminAnnouncements() {
                     </label>
                     <input
                       type="number"
-                      value={contributionSettings.gracePeriod}
-                      onChange={(e) => setContributionSettings({ ...contributionSettings, gracePeriod: parseInt(e.target.value) })}
+                      value={contributionSettings.gracePeriod || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0
+                        setContributionSettings({ ...contributionSettings, gracePeriod: val })
+                      }}
                       className="input-field"
                     />
                   </div>

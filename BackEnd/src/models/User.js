@@ -47,7 +47,7 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     status: {
-      type: DataTypes.ENUM('active', 'inactive', 'suspended', 'pending'),
+      type: DataTypes.ENUM('active', 'inactive', 'suspended', 'pending', 'burned'),
       defaultValue: 'active'
     },
     totalSavings: {
@@ -97,6 +97,19 @@ module.exports = (sequelize, DataTypes) => {
     lastLogin: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    resetToken: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
+    resetTokenExpiry: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    permissions: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
     },
     createdAt: {
       type: DataTypes.DATE,

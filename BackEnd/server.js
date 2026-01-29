@@ -8,14 +8,31 @@ const db = require('./config/db');
 
 const app = express();
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const { Server } = require('socket.io');
 
 // Middleware
-app.use(helmet());
+// Configure Helmet to allow cross-origin images
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "http://localhost:4000", "http://localhost:3000", "https:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+    },
+  },
+}));
+
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Type']
 }));
 app.use(morgan('dev'));
 
@@ -28,9 +45,22 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve uploaded files
+// Serve uploaded files with CORS headers
 const uploadPath = process.env.FILE_UPLOAD_PATH || 'uploads/';
-app.use('/uploads', express.static(path.join(__dirname, uploadPath)));
+app.use('/uploads', (req, res, next) => {
+  // Set CORS headers for static files
+  res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+}, express.static(path.join(__dirname, uploadPath)));
+
+// Ensure learn-grow upload directory exists
+const learnGrowDir = path.join(__dirname, 'uploads/learn-grow');
+if (!fs.existsSync(learnGrowDir)) {
+  fs.mkdirSync(learnGrowDir, { recursive: true });
+}
 
 // Rate limiting - More lenient limits to prevent 429 errors
 // Create separate limiters for authenticated and public routes
@@ -92,28 +122,72 @@ app.use('/api/loans', require('./src/routes/loan.routes'));
 app.use('/api/contributions', require('./src/routes/contribution.routes'));
 app.use('/api/transactions', require('./src/routes/transaction.routes'));
 app.use('/api/fines', require('./src/routes/fine.routes'));
+app.use('/api/fine-rules', require('./src/routes/fineRules.routes'));
 app.use('/api/announcements', require('./src/routes/announcement.routes'));
+app.use('/api/compliance', require('./src/routes/compliance.routes'));
 app.use('/api/meetings', require('./src/routes/meeting.routes'));
 app.use('/api/voting', require('./src/routes/voting.routes'));
 app.use('/api/learn-grow', require('./src/routes/learngrow.routes'));
+app.use('/api/secretary/documentation', require('./src/routes/documentation.routes'));
 app.use('/api/chat', require('./src/routes/chat.routes'));
 app.use('/api/notifications', require('./src/routes/notification.routes'));
+app.use('/api/message-templates', require('./src/routes/messageTemplate.routes'));
 app.use('/api/analytics', require('./src/routes/analytics.routes'));
+app.use('/api/reports', require('./src/routes/reports.routes'));
 app.use('/api/system', require('./src/routes/system.routes'));
 app.use('/api/upload', require('./src/routes/upload.routes'));
 app.use('/api/system-admin', require('./src/routes/systemadmin.routes'));
+app.use('/api/system-admin/maintenance', require('./src/routes/maintenance.routes'));
 app.use('/api/branches', require('./src/routes/branch.routes'));
 app.use('/api/audit-logs', require('./src/routes/audit.routes'));
 app.use('/api/support', require('./src/routes/support.routes'));
 app.use('/api/agent', require('./src/routes/agent.routes'));
 app.use('/api/cashier', require('./src/routes/cashier.routes'));
 app.use('/api/secretary', require('./src/routes/secretary.routes'));
+app.use('/api/secretary/members', require('./src/routes/secretaryMember.routes'));
+app.use('/api/secretary/support', require('./src/routes/secretarySupport.routes'));
+app.use('/api/secretary/reports', require('./src/routes/secretaryReports.routes'));
 app.use('/api/public', require('./src/routes/public.routes'));
 app.use('/api/member-applications', require('./src/routes/memberApplication.routes'));
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Umurenge Wallet API is running' });
+// Health check with database status
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  try {
+    await db.sequelize.authenticate();
+    dbStatus = 'connected';
+  } catch (error) {
+    dbStatus = 'disconnected';
+  }
+  
+  res.json({ 
+    status: 'ok', 
+    message: 'Ikumina Wallet API is running',
+    database: dbStatus
+  });
+});
+
+// Database connection check middleware (optional - can be used in routes)
+app.use((req, res, next) => {
+  const dbConnected = app.get('dbConnected');
+  if (!dbConnected && req.path !== '/api/health' && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/public')) {
+    // Allow health check and public routes even without DB
+    // For other routes, check if DB is available now
+    db.sequelize.authenticate()
+      .then(() => {
+        app.set('dbConnected', true);
+        next();
+      })
+      .catch(() => {
+        return res.status(503).json({
+          success: false,
+          message: 'Database connection unavailable. Please ensure MySQL is running.',
+          error: 'DATABASE_UNAVAILABLE'
+        });
+      });
+  } else {
+    next();
+  }
 });
 
 // Error handling middleware
@@ -141,14 +215,36 @@ if (!process.env.JWT_SECRET) {
   console.warn('⚠️  WARNING: JWT_SECRET not set in .env. Using default (change in production!)');
 }
 
-// Start server
-db.sequelize.authenticate()
-  .then(() => {
+// Start server with graceful database connection handling
+const startServer = async () => {
+  let dbConnected = false;
+  
+  // Try to connect to database, but don't fail if it's unavailable
+  try {
+    await db.sequelize.authenticate();
     console.log('✅ Database connection established');
-    
-    // Do not auto-sync at runtime; use migrations instead to avoid accidental alters/index churn
+    dbConnected = true;
+  } catch (error) {
+    if (error.name === 'SequelizeConnectionRefusedError' || error.name === 'SequelizeConnectionError') {
+      console.warn('⚠️  Database connection unavailable. Server will start in limited mode.');
+      console.warn('   Please ensure MySQL is running and check your .env database configuration.');
+      console.warn('   Database operations will fail until connection is restored.');
+      dbConnected = false;
+    } else {
+      console.error('❌ Database connection error:', error.message);
+      dbConnected = false;
+    }
+  }
+  
+  // Store database connection status in app for use in routes
+  app.set('dbConnected', dbConnected);
+  
+  // Do not auto-sync at runtime; use migrations instead to avoid accidental alters/index churn
+  if (dbConnected) {
     console.log('ℹ️  Skipping runtime sync. Use migrations to manage schema.');
-    
+  }
+  
+  try {
     const server = http.createServer(app);
     
     // Initialize Socket.io
@@ -176,6 +272,11 @@ db.sequelize.authenticate()
 
     io.use(async (socket, next) => {
       try {
+        // Check if database is available
+        if (!dbConnected) {
+          return next(new Error('Database unavailable. Please try again later.'));
+        }
+
         const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
         
         if (!token) {
@@ -183,15 +284,24 @@ db.sequelize.authenticate()
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        const user = await User.findByPk(decoded.userId);
         
-        if (!user) {
-          return next(new Error('Authentication error: User not found'));
-        }
+        try {
+          const user = await User.findByPk(decoded.userId);
+          
+          if (!user) {
+            return next(new Error('Authentication error: User not found'));
+          }
 
-        socket.userId = user.id;
-        socket.user = user;
-        next();
+          socket.userId = user.id;
+          socket.user = user;
+          next();
+        } catch (dbError) {
+          if (dbError.name === 'SequelizeConnectionRefusedError' || dbError.name === 'SequelizeConnectionError') {
+            console.error('[Socket.io] Database connection error during authentication');
+            return next(new Error('Database unavailable. Please try again later.'));
+          }
+          throw dbError;
+        }
       } catch (error) {
         console.error('[Socket.io] Authentication error:', error.message);
         next(new Error('Authentication error'));
@@ -420,11 +530,14 @@ db.sequelize.authenticate()
         process.exit(1);
       }
     });
-  })
-  .catch(err => {
-    console.error('❌ Unable to connect to database:', err);
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
-  });
+  }
+};
+
+// Start the server
+startServer();
 
 module.exports = app;
 

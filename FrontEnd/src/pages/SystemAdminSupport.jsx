@@ -1,17 +1,30 @@
 import { useState, useEffect } from 'react'
-import { Headphones, Plus, Eye, CheckCircle, XCircle, Clock, AlertCircle, Database, Shield, RefreshCw, Settings, User, MessageCircle } from 'lucide-react'
+import { Headphones, Plus, Eye, CheckCircle, XCircle, Clock, AlertCircle, Database, Shield, RefreshCw, Settings, User, MessageCircle, Upload } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function SystemAdminSupport() {
+  const navigate = useNavigate()
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
+  const { t: tSystemAdmin } = useTranslation('systemAdmin')
   const [activeTab, setActiveTab] = useState('tickets')
   const [showTicketDetails, setShowTicketDetails] = useState(false)
   const [selectedTicket, setSelectedTicket] = useState(null)
   const [showCreateTicket, setShowCreateTicket] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [users, setUsers] = useState([])
 
   const [supportTickets, setSupportTickets] = useState([])
   const [systemMaintenance, setSystemMaintenance] = useState([])
+  const [maintenanceStatus, setMaintenanceStatus] = useState({
+    backup: { loading: false, lastRun: null, status: null, backupPath: null },
+    update: { loading: false, lastRun: null, status: null },
+    security: { loading: false, lastRun: null, status: null },
+    cleanup: { loading: false, lastRun: null, status: null }
+  })
   const [systemStatus, setSystemStatus] = useState({
     uptime: '0%',
     responseTime: '0ms',
@@ -26,10 +39,24 @@ function SystemAdminSupport() {
 
   const [newTicket, setNewTicket] = useState({
     subject: '',
-    description: '',
-    category: 'Technical',
-    priority: 'Medium'
+    message: '',
+    category: 'other',
+    priority: 'medium',
+    userId: '',
+    attachments: []
   })
+
+  const fetchMaintenanceStatus = async () => {
+    try {
+      const { data } = await api.get('/system-admin/maintenance/status').catch(() => ({ data: { success: false } }))
+      if (data?.success) {
+        // Update maintenance status with recent activity
+        // This could be used to show last run times, etc.
+      }
+    } catch (error) {
+      console.error('[fetchMaintenanceStatus] Error:', error)
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -43,15 +70,22 @@ function SystemAdminSupport() {
           timeoutId = setTimeout(() => reject(new Error('Request timeout')), 5000)
         })
         
-        const ticketsRes = await Promise.race([
-          api.get('/support'),
-          timeoutPromise
-        ]).catch(() => ({ data: { data: [] } }))
+        const [ticketsRes, usersRes] = await Promise.all([
+          Promise.race([
+            api.get('/support'),
+            timeoutPromise
+          ]).catch(() => ({ data: { data: [] } })),
+          Promise.race([
+            api.get('/system-admin/users'),
+            timeoutPromise
+          ]).catch(() => ({ data: { data: [] } }))
+        ])
         
         if (timeoutId) clearTimeout(timeoutId)
         
         if (mounted) {
           setSupportTickets(ticketsRes?.data?.data || [])
+          setUsers(usersRes?.data?.data || [])
           setSystemMaintenance([])
           setSystemStatus({
             uptime: '0%',
@@ -59,10 +93,14 @@ function SystemAdminSupport() {
             activeUsers: 0,
             apiStatus: { mtn: 'Unknown', airtel: 'Unknown', bank: 'Unknown', twilio: 'Unknown' }
           })
+          
+          // Fetch maintenance status
+          fetchMaintenanceStatus()
         }
       } catch (e) {
         if (mounted) {
           setSupportTickets([])
+          setUsers([])
           setSystemMaintenance([])
         }
         // Silently fail - don't log to avoid console spam
@@ -80,73 +118,240 @@ function SystemAdminSupport() {
   }, [])
 
   const handleCreateTicket = async () => {
-    if (!newTicket.subject || !newTicket.description) {
+    if (!newTicket.subject || !newTicket.message) {
       alert('Please fill in subject and description.')
       return
     }
     try {
-      await api.post('/support', newTicket)
-      const { data } = await api.get('/support').catch(() => ({ data: { data: [] } }))
-      setSupportTickets(data?.data || [])
-      setShowCreateTicket(false)
-      setNewTicket({ subject: '', description: '', category: 'Technical', priority: 'Medium' })
+      const payload = {
+        subject: newTicket.subject,
+        message: newTicket.message,
+        category: newTicket.category,
+        priority: newTicket.priority
+      }
+      
+      // Add userId if provided (System Admin can create tickets for any user)
+      if (newTicket.userId) {
+        payload.userId = parseInt(newTicket.userId)
+      }
+      
+      const { data } = await api.post('/support/create', payload)
+      
+      if (data?.success) {
+        alert('Ticket created successfully!')
+        const ticketsRes = await api.get('/support').catch(() => ({ data: { data: [] } }))
+        setSupportTickets(ticketsRes?.data?.data || [])
+        setShowCreateTicket(false)
+        setNewTicket({ subject: '', message: '', category: 'other', priority: 'medium', userId: '', attachments: [] })
+      }
     } catch (e) {
-      alert(e?.response?.data?.message || 'Failed to create ticket')
+      console.error('[SystemAdminSupport] Error creating ticket:', e)
+      alert(e?.response?.data?.message || 'Failed to create ticket. Please check your connection.')
     }
   }
 
   const handleViewTicketDetails = (ticket) => {
-    setSelectedTicket(ticket)
-    setShowTicketDetails(true)
+    navigate(`/system-admin/support/tickets/${ticket.id}`)
+  }
+  
+  const handleRowClick = (ticket) => {
+    navigate(`/system-admin/support/tickets/${ticket.id}`)
+  }
+  
+  const handleUserClick = (userId) => {
+    if (userId) {
+      navigate(`/system-admin/users/${userId}`)
+    }
   }
 
   const handleAssignTicket = (ticketId) => {
-    alert(`Assigning ticket ${ticketId}...`)
+    alert(tSystemAdmin('assigningTicket', { defaultValue: `Assigning ticket ${ticketId}...` }))
   }
 
   const handleCloseTicket = (ticketId) => {
-    alert(`Closing ticket ${ticketId}...`)
+    alert(tSystemAdmin('closingTicket', { defaultValue: `Closing ticket ${ticketId}...` }))
   }
 
-  const handlePerformBackup = () => {
-    alert('Initiating database backup...')
+  const handlePerformBackup = async () => {
+    try {
+      setMaintenanceStatus(prev => ({ ...prev, backup: { ...prev.backup, loading: true } }))
+      
+      const { data } = await api.post('/system-admin/maintenance/backup')
+      
+      if (data?.success) {
+        setMaintenanceStatus(prev => ({
+          ...prev,
+          backup: {
+            loading: false,
+            lastRun: new Date().toISOString(),
+            status: 'success',
+            backupPath: data.data.backupPath,
+            backupFile: data.data.backupFile,
+            fileSize: data.data.fileSize
+          }
+        }))
+        
+        // Show success message with backup location
+        alert(`Database backup completed successfully!\n\nBackup File: ${data.data.backupFile}\nLocation: ${data.data.backupPath}\nSize: ${data.data.fileSize}`)
+        
+        // Refresh maintenance status
+        fetchMaintenanceStatus()
+      }
+    } catch (error) {
+      console.error('[handlePerformBackup] Error:', error)
+      setMaintenanceStatus(prev => ({
+        ...prev,
+        backup: { ...prev.backup, loading: false, status: 'failed' }
+      }))
+      alert('Failed to perform backup: ' + (error?.response?.data?.message || error?.message || 'Unknown error'))
+    }
   }
 
-  const handlePerformUpdate = () => {
-    alert('Initiating system update...')
+  const handlePerformUpdate = async () => {
+    try {
+      setMaintenanceStatus(prev => ({ ...prev, update: { ...prev.update, loading: true } }))
+      
+      const { data } = await api.post('/system-admin/maintenance/update')
+      
+      if (data?.success) {
+        setMaintenanceStatus(prev => ({
+          ...prev,
+          update: {
+            loading: false,
+            lastRun: new Date().toISOString(),
+            status: 'success'
+          }
+        }))
+        
+        alert('System update completed successfully!')
+        fetchMaintenanceStatus()
+      }
+    } catch (error) {
+      console.error('[handlePerformUpdate] Error:', error)
+      setMaintenanceStatus(prev => ({
+        ...prev,
+        update: { ...prev.update, loading: false, status: 'failed' }
+      }))
+      alert('Failed to perform update: ' + (error?.response?.data?.message || error?.message || 'Unknown error'))
+    }
   }
-
-  const handleRunMaintenance = (maintenanceId) => {
-    alert(`Running maintenance ${maintenanceId}...`)
+  
+  const handleRunMaintenance = async (maintenanceId) => {
+    try {
+      let endpoint = ''
+      let statusKey = ''
+      
+      if (maintenanceId === 'MAINT003') {
+        // Security Scan
+        endpoint = '/system-admin/maintenance/security-scan'
+        statusKey = 'security'
+      } else if (maintenanceId === 'MAINT004') {
+        // Log Cleanup
+        endpoint = '/system-admin/maintenance/log-cleanup'
+        statusKey = 'cleanup'
+      } else {
+        alert('Unknown maintenance task')
+        return
+      }
+      
+      setMaintenanceStatus(prev => ({
+        ...prev,
+        [statusKey]: { ...prev[statusKey], loading: true }
+      }))
+      
+      const { data } = await api.post(endpoint)
+      
+      if (data?.success) {
+        setMaintenanceStatus(prev => ({
+          ...prev,
+          [statusKey]: {
+            loading: false,
+            lastRun: new Date().toISOString(),
+            status: 'success',
+            result: data.data
+          }
+        }))
+        
+        if (statusKey === 'cleanup') {
+          alert(`Log cleanup completed successfully!\n\nDeleted ${data.data.logsDeleted} log entries older than ${data.data.daysToKeep} days.`)
+        } else if (statusKey === 'security') {
+          const summary = data.data.summary
+          alert(`Security scan completed successfully!\n\nTotal Checks: ${summary.total}\nPassed: ${summary.passed}\nFailed: ${summary.failed}`)
+        }
+        
+        fetchMaintenanceStatus()
+      }
+    } catch (error) {
+      console.error('[handleRunMaintenance] Error:', error)
+      const statusKey = maintenanceId === 'MAINT003' ? 'security' : 'cleanup'
+      setMaintenanceStatus(prev => ({
+        ...prev,
+        [statusKey]: { ...prev[statusKey], loading: false, status: 'failed' }
+      }))
+      alert('Failed to run maintenance: ' + (error?.response?.data?.message || error?.message || 'Unknown error'))
+    }
   }
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'Open': return 'bg-red-100 text-red-700'
-      case 'In Progress': return 'bg-yellow-100 text-yellow-700'
-      case 'Closed': return 'bg-green-100 text-green-700'
-      case 'Success': return 'bg-green-100 text-green-700'
-      case 'Failed': return 'bg-red-100 text-red-700'
+    const statusLower = status?.toLowerCase()
+    switch (statusLower) {
+      case 'open': return 'bg-yellow-100 text-yellow-700'
+      case 'in_progress': return 'bg-blue-100 text-blue-700'
+      case 'resolved': return 'bg-green-100 text-green-700'
+      case 'closed': return 'bg-gray-100 text-gray-700'
       default: return 'bg-gray-100 text-gray-700'
     }
   }
 
   const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'High': return 'bg-red-100 text-red-700'
-      case 'Medium': return 'bg-yellow-100 text-yellow-700'
-      case 'Low': return 'bg-green-100 text-green-700'
+    const priorityLower = priority?.toLowerCase()
+    switch (priorityLower) {
+      case 'urgent':
+      case 'high': return 'bg-red-100 text-red-700'
+      case 'medium': return 'bg-yellow-100 text-yellow-700'
+      case 'low': return 'bg-green-100 text-green-700'
       default: return 'bg-gray-100 text-gray-700'
     }
   }
 
   const getCategoryColor = (category) => {
-    switch (category) {
-      case 'Technical': return 'bg-blue-100 text-blue-700'
-      case 'User Support': return 'bg-purple-100 text-purple-700'
-      case 'Performance': return 'bg-orange-100 text-orange-700'
-      case 'Feature Request': return 'bg-green-100 text-green-700'
+    const categoryLower = category?.toLowerCase()
+    switch (categoryLower) {
+      case 'technical': return 'bg-blue-100 text-blue-700'
+      case 'account': return 'bg-purple-100 text-purple-700'
+      case 'loan': return 'bg-orange-100 text-orange-700'
+      case 'contribution': return 'bg-green-100 text-green-700'
+      case 'other': return 'bg-gray-100 text-gray-700'
       default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+  
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  }
+  
+  const getStatusDisplay = (status) => {
+    const statusLower = status?.toLowerCase()
+    switch (statusLower) {
+      case 'open': return tCommon('open', { defaultValue: 'Open' })
+      case 'in_progress': return t('inProgress')
+      case 'resolved': return t('resolved')
+      case 'closed': return tSystemAdmin('closed', { defaultValue: 'Closed' })
+      default: return status || t('unknown')
+    }
+  }
+  
+  const getCategoryDisplay = (category) => {
+    const categoryLower = category?.toLowerCase()
+    switch (categoryLower) {
+      case 'technical': return tSystemAdmin('technical', { defaultValue: 'Technical' })
+      case 'account': return tSystemAdmin('account', { defaultValue: 'Account' })
+      case 'loan': return t('loans')
+      case 'contribution': return t('contributions')
+      case 'other': return tSystemAdmin('other', { defaultValue: 'Other' })
+      default: return category || tSystemAdmin('other')
     }
   }
 
@@ -161,16 +366,16 @@ function SystemAdminSupport() {
   return (
     <Layout userRole="System Admin">
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">Support & Maintenance</h1>
-        <p className="text-gray-600">Assign support tickets, perform system updates, and monitor uptime</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{tSystemAdmin('supportMaintenance', { defaultValue: 'Support & Maintenance' })}</h1>
+        <p className="text-gray-600 dark:text-gray-400">{tSystemAdmin('assignSupportTicketsPerformUpdates', { defaultValue: 'Assign support tickets, perform system updates, and monitor uptime' })}</p>
 
         {/* System Status */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">System Uptime</p>
-                <p className="text-2xl font-bold text-gray-800">{systemStatus.uptime}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('systemUptime', { defaultValue: 'System Uptime' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{systemStatus.uptime}</p>
               </div>
               <Shield className="text-green-600" size={32} />
             </div>
@@ -178,8 +383,8 @@ function SystemAdminSupport() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Response Time</p>
-                <p className="text-2xl font-bold text-gray-800">{systemStatus.responseTime}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('responseTime', { defaultValue: 'Response Time' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{systemStatus.responseTime}</p>
               </div>
               <RefreshCw className="text-blue-600" size={32} />
             </div>
@@ -187,8 +392,8 @@ function SystemAdminSupport() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Active Users</p>
-                <p className="text-2xl font-bold text-gray-800">{systemStatus.activeUsers.toLocaleString()}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('activeUsers', { defaultValue: 'Active Users' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{systemStatus.activeUsers.toLocaleString()}</p>
               </div>
               <User className="text-purple-600" size={32} />
             </div>
@@ -196,8 +401,8 @@ function SystemAdminSupport() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Open Tickets</p>
-                <p className="text-2xl font-bold text-gray-800">{supportTickets.filter(t => t.status !== 'Closed' && t.status !== 'closed').length}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('openTickets', { defaultValue: 'Open Tickets' })}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{supportTickets.filter(t => t.status === 'open' || t.status === 'in_progress').length}</p>
               </div>
               <Headphones className="text-orange-600" size={32} />
             </div>
@@ -205,8 +410,8 @@ function SystemAdminSupport() {
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-lg">
-          <div className="border-b border-gray-200">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
+          <div className="border-b border-gray-200 dark:border-gray-700">
             <div className="flex gap-2 p-2">
               {['tickets', 'maintenance', 'monitoring'].map((tab) => (
                 <button
@@ -215,10 +420,10 @@ function SystemAdminSupport() {
                   className={`px-4 py-3 rounded-lg font-medium transition-all ${
                     activeTab === tab
                       ? 'bg-primary-500 text-white shadow-md'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tSystemAdmin(`tab.${tab}`, { defaultValue: tab.charAt(0).toUpperCase() + tab.slice(1) })}
                 </button>
               ))}
             </div>
@@ -228,87 +433,115 @@ function SystemAdminSupport() {
             {activeTab === 'tickets' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-800">Support Tickets</h2>
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('supportTickets', { defaultValue: 'Support Tickets' })}</h2>
                   <button
                     onClick={() => setShowCreateTicket(true)}
                     className="btn-primary flex items-center gap-2"
                   >
-                    <Plus size={20} /> Create Ticket
+                    <Plus size={20} /> {tSystemAdmin('createTicket', { defaultValue: 'Create Ticket' })}
                   </button>
                 </div>
 
                 {loading ? (
-                  <div className="text-center py-8 text-gray-500">Loading support tickets...</div>
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">{t('loadingSupportRequests')}</div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket ID</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('ticketId', { defaultValue: 'Ticket ID' })}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('subject', { defaultValue: 'Subject' })}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('category', { defaultValue: 'Category' })}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('priority', { defaultValue: 'Priority' })}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('status')}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('assignedTo', { defaultValue: 'Assigned To' })}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('created', { defaultValue: 'Created' })}</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tCommon('actions', { defaultValue: 'Actions' })}</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {supportTickets.length === 0 ? (
                           <tr>
-                            <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
-                              No support tickets found
+                            <td colSpan="8" className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                              {t('noSupportRequestsFound')}
                             </td>
                           </tr>
                         ) : (
                           supportTickets.map(ticket => (
-                        <tr key={ticket.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ticket.id}</td>
+                        <tr 
+                          key={ticket.id}
+                          onClick={() => handleRowClick(ticket)}
+                          className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{ticket.id}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div>
-                              <p className="text-sm font-medium text-gray-900">{ticket.subject}</p>
-                              <p className="text-xs text-gray-500 truncate max-w-xs">{ticket.description}</p>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{ticket.subject}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">{ticket.message}</p>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getCategoryColor(ticket.category)}`}>
-                              {ticket.category}
+                              {getCategoryDisplay(ticket.category)}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityColor(ticket.priority)}`}>
-                              {ticket.priority}
+                              {ticket.priority ? tSystemAdmin(`priority.${ticket.priority}`, { defaultValue: ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1) }) : tSystemAdmin('priority.medium', { defaultValue: 'Medium' })}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
-                              {ticket.status}
+                              {getStatusDisplay(ticket.status)}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ticket.assignedTo}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ticket.createdDate}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {ticket.assignedAgent ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleUserClick(ticket.assignedAgent.id)
+                                }}
+                                className="text-primary-600 dark:text-primary-400 hover:underline"
+                              >
+                                {ticket.assignedAgent.name || `User #${ticket.assignedTo}`}
+                              </button>
+                            ) : ticket.assignedTo ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleUserClick(ticket.assignedTo)
+                                }}
+                                className="text-primary-600 dark:text-primary-400 hover:underline"
+                              >
+                                {tSystemAdmin('user', { defaultValue: 'User' })} #${ticket.assignedTo}
+                              </button>
+                            ) : (
+                              <span>{tSystemAdmin('unassigned', { defaultValue: 'Unassigned' })}</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(ticket.createdAt)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleViewTicketDetails(ticket)}
-                              className="text-primary-600 hover:text-primary-900 mr-3"
-                              title="View Details"
+                              className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 mr-3"
+                              title={tCommon('view')}
                             >
                               <Eye size={20} />
                             </button>
-                            {ticket.status !== 'Closed' && (
+                            {(ticket.status === 'open' || ticket.status === 'in_progress') && (
                               <>
                                 <button
                                   onClick={() => handleAssignTicket(ticket.id)}
-                                  className="text-blue-600 hover:text-blue-900 mr-3"
-                                  title="Assign Ticket"
+                                  className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-3"
+                                  title={tSystemAdmin('assignTicket', { defaultValue: 'Assign Ticket' })}
                                 >
                                   <User size={20} />
                                 </button>
                                 <button
                                   onClick={() => handleCloseTicket(ticket.id)}
-                                  className="text-green-600 hover:text-green-900"
-                                  title="Close Ticket"
+                                  className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                  title={tSystemAdmin('closeTicket', { defaultValue: 'Close Ticket' })}
                                 >
                                   <CheckCircle size={20} />
                                 </button>
@@ -327,145 +560,268 @@ function SystemAdminSupport() {
 
             {activeTab === 'maintenance' && (
               <div className="space-y-6">
-                <h2 className="text-xl font-bold text-gray-800">System Maintenance</h2>
-                <p className="text-gray-600">Schedule and monitor automated maintenance tasks</p>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('systemMaintenance', { defaultValue: 'System Maintenance' })}</h2>
+                <p className="text-gray-600 dark:text-gray-400">{tSystemAdmin('scheduleMonitorAutomatedMaintenance', { defaultValue: 'Schedule and monitor automated maintenance tasks' })}</p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
                         <Database className="text-blue-600" size={20} />
-                        Database Backup
+                        {tSystemAdmin('databaseBackup', { defaultValue: 'Database Backup' })}
                       </h3>
                       <button
                         onClick={handlePerformBackup}
-                        className="btn-secondary text-sm"
+                        disabled={maintenanceStatus.backup.loading}
+                        className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        Run Now
+                        {maintenanceStatus.backup.loading ? (
+                          <>
+                            <RefreshCw className="animate-spin" size={16} />
+                            Running...
+                          </>
+                        ) : (
+                          tSystemAdmin('runNow', { defaultValue: 'Run Now' })
+                        )}
                       </button>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Schedule:</span> Daily at 2:00 AM</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Last Run:</span> 2024-01-15 02:00:00</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Status:</span>
-                        <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                          Success
-                        </span>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('schedule', { defaultValue: 'Schedule' })}:</span> {tSystemAdmin('dailyAt2AM', { defaultValue: 'Daily at 2:00 AM' })}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="font-semibold">{tSystemAdmin('lastRun', { defaultValue: 'Last Run' })}:</span>{' '}
+                        {maintenanceStatus.backup.lastRun ? new Date(maintenanceStatus.backup.lastRun).toLocaleString() : 'Never'}
                       </p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Next Run:</span> 2024-01-16 02:00:00</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{t('status')}:</span>
+                        {maintenanceStatus.backup.loading ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                            In Progress...
+                          </span>
+                        ) : maintenanceStatus.backup.status === 'success' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                            {tSystemAdmin('success', { defaultValue: 'Success' })}
+                          </span>
+                        ) : maintenanceStatus.backup.status === 'failed' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+                            {tSystemAdmin('failed', { defaultValue: 'Failed' })}
+                          </span>
+                        ) : (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            Not Run
+                          </span>
+                        )}
+                      </p>
+                      {maintenanceStatus.backup.backupPath && (
+                        <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                          <p className="text-xs font-semibold text-blue-800 dark:text-blue-200">Backup Location:</p>
+                          <p className="text-xs text-blue-700 dark:text-blue-300 break-all">{maintenanceStatus.backup.backupPath}</p>
+                          {maintenanceStatus.backup.fileSize && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">Size: {maintenanceStatus.backup.fileSize}</p>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('nextRun', { defaultValue: 'Next Run' })}:</span> {new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleString()}</p>
                     </div>
                   </div>
 
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
                         <RefreshCw className="text-green-600" size={20} />
-                        System Update
+                        {tSystemAdmin('systemUpdate', { defaultValue: 'System Update' })}
                       </h3>
                       <button
                         onClick={handlePerformUpdate}
-                        className="btn-secondary text-sm"
+                        disabled={maintenanceStatus.update.loading}
+                        className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        Run Now
+                        {maintenanceStatus.update.loading ? (
+                          <>
+                            <RefreshCw className="animate-spin" size={16} />
+                            Running...
+                          </>
+                        ) : (
+                          tSystemAdmin('runNow')
+                        )}
                       </button>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Schedule:</span> Weekly on Sundays</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Last Run:</span> 2024-01-14 01:00:00</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Status:</span>
-                        <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                          Success
-                        </span>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('schedule')}:</span> {tSystemAdmin('weeklyOnSundays', { defaultValue: 'Weekly on Sundays' })}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="font-semibold">{tSystemAdmin('lastRun')}:</span>{' '}
+                        {maintenanceStatus.update.lastRun ? new Date(maintenanceStatus.update.lastRun).toLocaleString() : 'Never'}
                       </p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Next Run:</span> 2024-01-21 01:00:00</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{t('status')}:</span>
+                        {maintenanceStatus.update.loading ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                            In Progress...
+                          </span>
+                        ) : maintenanceStatus.update.status === 'success' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                            {tSystemAdmin('success')}
+                          </span>
+                        ) : maintenanceStatus.update.status === 'failed' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+                            {tSystemAdmin('failed', { defaultValue: 'Failed' })}
+                          </span>
+                        ) : (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            Not Run
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('nextRun')}:</span> {new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleString()}</p>
                     </div>
                   </div>
 
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
                         <Shield className="text-purple-600" size={20} />
-                        Security Scan
+                        {tSystemAdmin('securityScan', { defaultValue: 'Security Scan' })}
                       </h3>
                       <button
                         onClick={() => handleRunMaintenance('MAINT003')}
-                        className="btn-secondary text-sm"
+                        disabled={maintenanceStatus.security.loading}
+                        className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        Run Now
+                        {maintenanceStatus.security.loading ? (
+                          <>
+                            <RefreshCw className="animate-spin" size={16} />
+                            Scanning...
+                          </>
+                        ) : (
+                          tSystemAdmin('runNow')
+                        )}
                       </button>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Schedule:</span> Daily at 6:00 AM</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Last Run:</span> 2024-01-15 06:00:00</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Status:</span>
-                        <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                          Success
-                        </span>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('schedule')}:</span> {tSystemAdmin('dailyAt6AM', { defaultValue: 'Daily at 6:00 AM' })}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="font-semibold">{tSystemAdmin('lastRun')}:</span>{' '}
+                        {maintenanceStatus.security.lastRun ? new Date(maintenanceStatus.security.lastRun).toLocaleString() : 'Never'}
                       </p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Next Run:</span> 2024-01-16 06:00:00</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{t('status')}:</span>
+                        {maintenanceStatus.security.loading ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                            Scanning...
+                          </span>
+                        ) : maintenanceStatus.security.status === 'success' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                            {tSystemAdmin('success')}
+                          </span>
+                        ) : maintenanceStatus.security.status === 'failed' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+                            {tSystemAdmin('failed', { defaultValue: 'Failed' })}
+                          </span>
+                        ) : (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            Not Run
+                          </span>
+                        )}
+                      </p>
+                      {maintenanceStatus.security.result && (
+                        <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                          <p className="text-xs text-purple-700 dark:text-purple-300">
+                            Checks: {maintenanceStatus.security.result.summary?.passed || 0}/{maintenanceStatus.security.result.summary?.total || 0} passed
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('nextRun')}:</span> {new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleString()}</p>
                     </div>
                   </div>
 
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
                         <Settings className="text-orange-600" size={20} />
-                        Log Cleanup
+                        {tSystemAdmin('logCleanup', { defaultValue: 'Log Cleanup' })}
                       </h3>
                       <button
                         onClick={() => handleRunMaintenance('MAINT004')}
-                        className="btn-secondary text-sm"
+                        disabled={maintenanceStatus.cleanup.loading}
+                        className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        Run Now
+                        {maintenanceStatus.cleanup.loading ? (
+                          <>
+                            <RefreshCw className="animate-spin" size={16} />
+                            Cleaning...
+                          </>
+                        ) : (
+                          tSystemAdmin('runNow')
+                        )}
                       </button>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Schedule:</span> Weekly on Fridays</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Last Run:</span> 2024-01-13 03:00:00</p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Status:</span>
-                        <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                          Failed
-                        </span>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('schedule')}:</span> {tSystemAdmin('weeklyOnFridays', { defaultValue: 'Weekly on Fridays' })}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="font-semibold">{tSystemAdmin('lastRun')}:</span>{' '}
+                        {maintenanceStatus.cleanup.lastRun ? new Date(maintenanceStatus.cleanup.lastRun).toLocaleString() : 'Never'}
                       </p>
-                      <p className="text-sm text-gray-600"><span className="font-semibold">Next Run:</span> 2024-01-20 03:00:00</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{t('status')}:</span>
+                        {maintenanceStatus.cleanup.loading ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                            Cleaning...
+                          </span>
+                        ) : maintenanceStatus.cleanup.status === 'success' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                            {tSystemAdmin('success')}
+                          </span>
+                        ) : maintenanceStatus.cleanup.status === 'failed' ? (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+                            {tSystemAdmin('failed', { defaultValue: 'Failed' })}
+                          </span>
+                        ) : (
+                          <span className="ml-2 px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            Not Run
+                          </span>
+                        )}
+                      </p>
+                      {maintenanceStatus.cleanup.result && (
+                        <div className="mt-2 p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                          <p className="text-xs text-orange-700 dark:text-orange-300">
+                            Deleted: {maintenanceStatus.cleanup.result.logsDeleted || 0} log entries
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold">{tSystemAdmin('nextRun')}:</span> {new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
 
                 {systemMaintenance.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">No maintenance records available</div>
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">{tSystemAdmin('noMaintenanceRecordsAvailable', { defaultValue: 'No maintenance records available' })}</div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Maintenance Type</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Schedule</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Run</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Run</th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('maintenanceType', { defaultValue: 'Maintenance Type' })}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('schedule')}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('lastRun')}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('status')}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('duration', { defaultValue: 'Duration' })}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('nextRun')}</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tCommon('actions')}</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {systemMaintenance.map(maintenance => (
                         <tr key={maintenance.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{maintenance.type}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{maintenance.schedule}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{maintenance.lastRun}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{maintenance.type}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{maintenance.schedule}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{maintenance.lastRun}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(maintenance.status)}`}>
                               {maintenance.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{maintenance.duration}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{maintenance.nextRun}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{maintenance.duration}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{maintenance.nextRun}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button
                               onClick={() => handleRunMaintenance(maintenance.id)}
-                              className="text-primary-600 hover:text-primary-900"
-                              title="Run Now"
+                              className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                              title={tSystemAdmin('runNow')}
                             >
                               <RefreshCw size={20} />
                             </button>
@@ -481,33 +837,33 @@ function SystemAdminSupport() {
 
             {activeTab === 'monitoring' && (
               <div className="space-y-6">
-                <h2 className="text-xl font-bold text-gray-800">System Monitoring</h2>
-                <p className="text-gray-600">Monitor system performance, uptime, and API connections</p>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('systemMonitoring', { defaultValue: 'System Monitoring' })}</h2>
+                <p className="text-gray-600 dark:text-gray-400">{tSystemAdmin('monitorSystemPerformanceUptime', { defaultValue: 'Monitor system performance, uptime, and API connections' })}</p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="card">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">API Status</h3>
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">{tSystemAdmin('apiStatus', { defaultValue: 'API Status' })}</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">MTN Mobile Money</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('mtnMobileMoney', { defaultValue: 'MTN Mobile Money' })}</span>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getApiStatusColor(systemStatus.apiStatus.mtn)}`}>
                           {systemStatus.apiStatus.mtn}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">Airtel Money</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('airtelMoney', { defaultValue: 'Airtel Money' })}</span>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getApiStatusColor(systemStatus.apiStatus.airtel)}`}>
                           {systemStatus.apiStatus.airtel}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">Bank API</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('bankApi', { defaultValue: 'Bank API' })}</span>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getApiStatusColor(systemStatus.apiStatus.bank)}`}>
                           {systemStatus.apiStatus.bank}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">Twilio SMS</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('twilioSms', { defaultValue: 'Twilio SMS' })}</span>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getApiStatusColor(systemStatus.apiStatus.twilio)}`}>
                           {systemStatus.apiStatus.twilio}
                         </span>
@@ -516,32 +872,32 @@ function SystemAdminSupport() {
                   </div>
 
                   <div className="card">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Performance Metrics</h3>
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">{tSystemAdmin('performanceMetrics')}</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">Average Response Time</span>
-                        <span className="text-sm font-semibold text-gray-800">145ms</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('averageResponseTime', { defaultValue: 'Average Response Time' })}</span>
+                        <span className="text-sm font-semibold text-gray-800 dark:text-white">145ms</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">Uptime (30 days)</span>
-                        <span className="text-sm font-semibold text-green-600">99.2%</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('uptime30Days', { defaultValue: 'Uptime (30 days)' })}</span>
+                        <span className="text-sm font-semibold text-green-600 dark:text-green-400">99.2%</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">Error Rate</span>
-                        <span className="text-sm font-semibold text-gray-800">0.08%</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('errorRate', { defaultValue: 'Error Rate' })}</span>
+                        <span className="text-sm font-semibold text-gray-800 dark:text-white">0.08%</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-700">Active Sessions</span>
-                        <span className="text-sm font-semibold text-gray-800">1,890</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{tSystemAdmin('activeSessions', { defaultValue: 'Active Sessions' })}</span>
+                        <span className="text-sm font-semibold text-gray-800 dark:text-white">1,890</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Alerts</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">{tSystemAdmin('recentAlerts', { defaultValue: 'Recent Alerts' })}</h3>
                   <div className="space-y-3">
-                    <div className="text-center py-8 text-gray-500">No alerts available</div>
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">{tSystemAdmin('noAlertsAvailable', { defaultValue: 'No alerts available' })}</div>
                   </div>
                 </div>
               </div>
@@ -552,58 +908,88 @@ function SystemAdminSupport() {
         {/* Create Ticket Modal */}
         {showCreateTicket && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6 space-y-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-xl p-6 space-y-4">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-800">Create Support Ticket</h2>
-                <button onClick={() => setShowCreateTicket(false)} className="text-gray-500 hover:text-gray-700">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('createSupportTicket', { defaultValue: 'Create Support Ticket' })}</h2>
+                <button onClick={() => setShowCreateTicket(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                   <XCircle size={24} />
                 </button>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Subject</label>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Subject <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    className="input-field"
+                    className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
                     value={newTicket.subject}
                     onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
                     placeholder="Enter ticket subject"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Description <span className="text-red-500">*</span>
+                  </label>
                   <textarea
-                    className="input-field"
+                    className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
                     rows="4"
-                    value={newTicket.description}
-                    onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
+                    value={newTicket.message}
+                    onChange={(e) => setNewTicket({ ...newTicket, message: e.target.value })}
                     placeholder="Enter ticket description"
+                    required
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Category</label>
+                    <select
+                      className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                      value={newTicket.category}
+                      onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
+                    >
+                      <option value="other">Other</option>
+                      <option value="technical">Technical</option>
+                      <option value="account">Account</option>
+                      <option value="loan">Loan</option>
+                      <option value="contribution">Contribution</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Priority</label>
+                    <select
+                      className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                      value={newTicket.priority}
+                      onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">User (Optional)</label>
                   <select
-                    className="input-field"
-                    value={newTicket.category}
-                    onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
+                    className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                    value={newTicket.userId}
+                    onChange={(e) => setNewTicket({ ...newTicket, userId: e.target.value })}
                   >
-                    <option value="Technical">Technical</option>
-                    <option value="User Support">User Support</option>
-                    <option value="Performance">Performance</option>
-                    <option value="Feature Request">Feature Request</option>
+                    <option value="">Select user (optional)</option>
+                    {users.map(user => (
+                      <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
-                  <select
-                    className="input-field"
-                    value={newTicket.priority}
-                    onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                  </select>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Attachments (Optional)</label>
+                  <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center">
+                    <Upload size={24} className="mx-auto text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600 dark:text-gray-400">File upload feature coming soon</p>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4">
@@ -611,13 +997,13 @@ function SystemAdminSupport() {
                   onClick={() => setShowCreateTicket(false)}
                   className="btn-secondary"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button
                   onClick={handleCreateTicket}
                   className="btn-primary"
                 >
-                  Create Ticket
+                  {tSystemAdmin('createTicket')}
                 </button>
               </div>
             </div>
@@ -627,39 +1013,45 @@ function SystemAdminSupport() {
         {/* Ticket Details Modal */}
         {showTicketDetails && selectedTicket && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6 space-y-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-xl p-6 space-y-4">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-800">Ticket Details</h2>
-                <button onClick={() => setShowTicketDetails(false)} className="text-gray-500 hover:text-gray-700">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('ticketDetails', { defaultValue: 'Ticket Details' })}</h2>
+                <button onClick={() => setShowTicketDetails(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                   <XCircle size={24} />
                 </button>
               </div>
               <div className="space-y-3">
-                <p className="text-gray-700"><span className="font-semibold">ID:</span> {selectedTicket.id}</p>
-                <p className="text-gray-700"><span className="font-semibold">Subject:</span> {selectedTicket.subject}</p>
-                <p className="text-gray-700"><span className="font-semibold">Description:</span> {selectedTicket.description}</p>
-                <p className="text-gray-700"><span className="font-semibold">Category:</span>
+                <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{tSystemAdmin('id', { defaultValue: 'ID' })}:</span> {selectedTicket.id}</p>
+                <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{tSystemAdmin('subject')}:</span> {selectedTicket.subject}</p>
+                <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{tSystemAdmin('message')}:</span> {selectedTicket.message}</p>
+                <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{tSystemAdmin('category')}:</span>
                   <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getCategoryColor(selectedTicket.category)}`}>
-                    {selectedTicket.category}
+                    {getCategoryDisplay(selectedTicket.category)}
                   </span>
                 </p>
-                <p className="text-gray-700"><span className="font-semibold">Priority:</span>
+                <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{tSystemAdmin('priority')}:</span>
                   <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityColor(selectedTicket.priority)}`}>
-                    {selectedTicket.priority}
+                    {selectedTicket.priority ? tSystemAdmin(`priority.${selectedTicket.priority}`, { defaultValue: selectedTicket.priority.charAt(0).toUpperCase() + selectedTicket.priority.slice(1) }) : tSystemAdmin('priority.medium')}
                   </span>
                 </p>
-                <p className="text-gray-700"><span className="font-semibold">Status:</span>
+                <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{t('status')}:</span>
                   <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedTicket.status)}`}>
-                    {selectedTicket.status}
+                    {getStatusDisplay(selectedTicket.status)}
                   </span>
                 </p>
+                {selectedTicket.user && (
+                  <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{tSystemAdmin('createdBy', { defaultValue: 'Created by' })}:</span> {selectedTicket.user.name} ({selectedTicket.user.email})</p>
+                )}
+                {selectedTicket.createdAt && (
+                  <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">{tSystemAdmin('created')}:</span> {formatDate(selectedTicket.createdAt)}</p>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   onClick={() => setShowTicketDetails(false)}
                   className="btn-secondary"
                 >
-                  Close
+                  {tCommon('close')}
                 </button>
               </div>
             </div>

@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
 import { FileCheck, Search, Filter, Download, Eye, AlertCircle, Shield, Clock, User, CreditCard, Building2, CheckCircle, XCircle } from 'lucide-react'
 import Layout from '../components/Layout'
+import { useTranslation } from 'react-i18next'
 import api from '../utils/api'
 
 function SystemAdminAudit() {
+  const { t } = useTranslation('dashboard')
+  const { t: tCommon } = useTranslation('common')
+  const { t: tSystemAdmin } = useTranslation('systemAdmin')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
   const [filterUser, setFilterUser] = useState('all')
@@ -14,55 +18,70 @@ function SystemAdminAudit() {
   const [loading, setLoading] = useState(true)
 
   const [auditLogs, setAuditLogs] = useState([])
-  const [complianceReports, setComplianceReports] = useState([])
-  const [fraudAlerts, setFraudAlerts] = useState([])
+  const [summary, setSummary] = useState({
+    totalLogs: 0,
+    successfulLogs: 0,
+    failedLogs: 0,
+    totalTransactions: 0
+  })
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
         setLoading(true)
-        const auditRes = await api.get('/audit-logs').catch(() => ({ data: { data: [] } }))
+        const params = new URLSearchParams()
+        if (searchTerm) params.append('search', searchTerm)
+        if (filterType !== 'all') params.append('filterType', filterType)
+        if (filterUser !== 'all') params.append('userId', filterUser)
+        if (filterDate !== 'all') params.append('filterDate', filterDate)
+        
+        const auditRes = await api.get(`/audit-logs?${params.toString()}`).catch(() => ({ data: { data: [], summary: {} } }))                                                                     
         if (mounted) {
           setAuditLogs(auditRes?.data?.data || [])
-          setComplianceReports([])
-          setFraudAlerts([])
+          if (auditRes?.data?.summary) {
+            setSummary(auditRes.data.summary)
+          }
         }
       } catch (e) {
         console.error('Failed to load audit logs:', e)
+        if (mounted) {
+          setAuditLogs([])
+        }
       } finally {
         if (mounted) setLoading(false)
       }
     })()
     return () => { mounted = false }
-  }, [])
+  }, [searchTerm, filterType, filterUser, filterDate])
 
   const handleExportAuditLog = async () => {
     try {
-      const response = await api.get('/audit-logs/export', { responseType: 'blob' })
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const params = new URLSearchParams()
+      if (searchTerm) params.append('search', searchTerm)
+      if (filterType !== 'all') params.append('filterType', filterType)
+      if (filterUser !== 'all') params.append('userId', filterUser)
+      if (filterDate !== 'all') params.append('filterDate', filterDate)
+      
+      const response = await api.get(`/audit-logs/export/excel?${params.toString()}`, { responseType: 'blob' })                                                                            
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `audit-log-${new Date().toISOString().split('T')[0]}.csv`)
+      link.setAttribute('download', `audit-log-${new Date().toISOString().split('T')[0]}.xlsx`)                                                                  
       document.body.appendChild(link)
       link.click()
       link.remove()
+      window.URL.revokeObjectURL(url)
     } catch (e) {
-      alert(e?.response?.data?.message || 'Failed to export audit log')
+      alert(e?.response?.data?.message || tSystemAdmin('failedToExportAuditLog', { defaultValue: 'Failed to export audit log' }))                               
     }
   }
 
-  const filteredAuditLogs = (auditLogs || []).filter(log => {
-    const matchesType = filterType === 'all' || (log.action || '').toLowerCase().includes(filterType.toLowerCase())
-    const matchesUser = filterUser === 'all' || (log.user || '').toLowerCase().includes(filterUser.toLowerCase())
-    const matchesSearch = 
-      (log.user || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (log.action || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (log.target || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (log.details || '').toLowerCase().includes(searchTerm.toLowerCase())
-
-    return matchesType && matchesUser && matchesSearch
-  })
+  // Filtering is done on backend, but we can do additional client-side filtering if needed
+  const filteredAuditLogs = auditLogs || []
 
   const handleViewAuditDetails = (audit) => {
     setSelectedAudit(audit)
@@ -70,11 +89,11 @@ function SystemAdminAudit() {
   }
 
   const handleGenerateComplianceReport = () => {
-    alert('Generating compliance report...')
+    alert(tSystemAdmin('generatingComplianceReport', { defaultValue: 'Generating compliance report...' }))
   }
 
   const handleInvestigateFraud = (alertId) => {
-    alert(`Investigating fraud alert ${alertId}...`)
+    alert(tSystemAdmin('investigatingFraudAlert', { defaultValue: `Investigating fraud alert ${alertId}...` }))
   }
 
   const getStatusColor = (status) => {
@@ -117,16 +136,16 @@ function SystemAdminAudit() {
   return (
     <Layout userRole="System Admin">
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">Audit & Compliance</h1>
-        <p className="text-gray-600">Access audit trails, monitor compliance, and detect fraudulent activities</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{tSystemAdmin('auditCompliance', { defaultValue: 'Audit & Compliance' })}</h1>
+        <p className="text-gray-600 dark:text-gray-400">{tSystemAdmin('accessAuditTrailsMonitorCompliance', { defaultValue: 'Access audit trails, monitor compliance, and detect fraudulent activities' })}</p>
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Total Audit Logs</p>
-                <p className="text-2xl font-bold text-gray-800">{auditLogs.length}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('totalAuditLogs', { defaultValue: 'Total Audit Logs' })}</p>         
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{summary.totalLogs || 0}</p>                                                          
               </div>
               <FileCheck className="text-blue-600" size={32} />
             </div>
@@ -134,35 +153,35 @@ function SystemAdminAudit() {
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Compliance Score</p>
-                <p className="text-2xl font-bold text-gray-800">0%</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('successfulActions', { defaultValue: 'Successful Actions' })}</p>                                                         
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{summary.successfulLogs || 0}</p>                                                                          
               </div>
-              <Shield className="text-green-600" size={32} />
+              <CheckCircle className="text-green-600" size={32} />
             </div>
           </div>
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Active Alerts</p>
-                <p className="text-2xl font-bold text-gray-800">{fraudAlerts.filter(a => a.status !== 'Resolved' && a.status !== 'resolved').length}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('failedActions', { defaultValue: 'Failed Actions' })}</p>              
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{summary.failedLogs || 0}</p>                                                                        
               </div>
-              <AlertCircle className="text-red-600" size={32} />
+              <XCircle className="text-red-600" size={32} />
             </div>
           </div>
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-2">Violations</p>
-                <p className="text-2xl font-bold text-gray-800">0</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{tSystemAdmin('totalTransactions', { defaultValue: 'Total Transactions' })}</p>                   
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">{summary.totalTransactions || 0}</p>                                                                           
               </div>
-              <XCircle className="text-orange-600" size={32} />
+              <CreditCard className="text-orange-600" size={32} />
             </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-lg">
-          <div className="border-b border-gray-200">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
+          <div className="border-b border-gray-200 dark:border-gray-700">
             <div className="flex gap-2 p-2">
               {['trail', 'compliance', 'fraud'].map((tab) => (
                 <button
@@ -171,10 +190,10 @@ function SystemAdminAudit() {
                   className={`px-4 py-3 rounded-lg font-medium transition-all ${
                     activeTab === tab
                       ? 'bg-primary-500 text-white shadow-md'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tSystemAdmin(`tab.${tab}`, { defaultValue: tab.charAt(0).toUpperCase() + tab.slice(1) })}
                 </button>
               ))}
             </div>
@@ -184,114 +203,106 @@ function SystemAdminAudit() {
             {activeTab === 'trail' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-800">Audit Trail</h2>
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('auditTrail', { defaultValue: 'Audit Trail' })}</h2>
                   <button
                     onClick={handleExportAuditLog}
                     className="btn-secondary flex items-center gap-2"
                   >
-                    <Download size={20} /> Export Log
+                    <Download size={20} /> {tSystemAdmin('exportLog', { defaultValue: 'Export Log' })}
                   </button>
                 </div>
 
                 {/* Search and Filter */}
                 <div className="flex flex-col md:flex-row items-center gap-4">
                   <div className="relative flex-1 w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
                     <input
                       type="text"
-                      placeholder="Search audit logs..."
-                      className="input-field pl-10"
+                      placeholder={tSystemAdmin('searchAuditLogs', { defaultValue: 'Search audit logs...' })}
+                      className="input-field pl-10 dark:bg-gray-700 dark:text-white dark:border-gray-600"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
                   <div className="w-full md:w-auto">
                     <select
-                      className="input-field"
+                      className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
                       value={filterType}
                       onChange={(e) => setFilterType(e.target.value)}
                     >
-                      <option value="all">All Actions</option>
-                      <option value="login">Login</option>
-                      <option value="transaction">Transaction</option>
-                      <option value="user">User Management</option>
-                      <option value="system">System Configuration</option>
-                      <option value="loan">Loan</option>
+                      <option value="all">{tSystemAdmin('allActions', { defaultValue: 'All Actions' })}</option>
+                      <option value="login">{tCommon('login')}</option>
+                      <option value="transaction">{t('transactions')}</option>
+                      <option value="user">{tSystemAdmin('userManagement', { defaultValue: 'User Management' })}</option>
+                      <option value="system">{tSystemAdmin('systemConfiguration', { defaultValue: 'System Configuration' })}</option>
+                      <option value="loan">{t('loans')}</option>
                     </select>
                   </div>
                   <div className="w-full md:w-auto">
                     <select
-                      className="input-field"
+                      className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
                       value={filterUser}
                       onChange={(e) => setFilterUser(e.target.value)}
                     >
-                      <option value="all">All Users</option>
-                      <option value="System Admin">System Admin</option>
-                      <option value="Agent">Agent</option>
-                      <option value="Client">Client</option>
+                      <option value="all">{tSystemAdmin('allUsers', { defaultValue: 'All Users' })}</option>
+                      <option value="System Admin">{tSystemAdmin('systemAdmin', { defaultValue: 'System Admin' })}</option>
+                      <option value="Agent">{tSystemAdmin('agent', { defaultValue: 'Agent' })}</option>
+                      <option value="Client">{tSystemAdmin('client', { defaultValue: 'Client' })}</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Audit Logs Table */}
                 {loading ? (
-                  <div className="text-center py-8 text-gray-500">Loading audit logs...</div>
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">{tSystemAdmin('loadingAuditLogs', { defaultValue: 'Loading audit logs...' })}</div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Risk</th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('timestamp', { defaultValue: 'Timestamp' })}</th>                                     
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tCommon('user')}</th>                                                                              
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('action', { defaultValue: 'Action' })}</th>                                           
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('entityType', { defaultValue: 'Entity Type' })}</th>                                           
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tSystemAdmin('ipAddress', { defaultValue: 'IP Address' })}</th>                                    
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{tCommon('actions')}</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {filteredAuditLogs.length === 0 ? (
                           <tr>
-                            <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
-                              No audit logs found
+                            <td colSpan="6" className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">                                                 
+                              {tSystemAdmin('noAuditLogsFound', { defaultValue: 'No audit logs found' })}                                                       
                             </td>
                           </tr>
                         ) : (
-                          filteredAuditLogs.map(log => (
-                        <tr key={log.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.timestamp}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">{log.user}</p>
-                              <p className="text-xs text-gray-500">{log.userId}</p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.action}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.target}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.ipAddress}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(log.status)}`}>
-                              {log.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getRiskColor(log.riskLevel)}`}>
-                              {log.riskLevel}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={() => handleViewAuditDetails(log)}
-                              className="text-primary-600 hover:text-primary-900"
-                              title="View Details"
-                            >
-                              <Eye size={20} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                          filteredAuditLogs.map(log => {
+                            const logUser = log.user || {}
+                            const createdAt = log.createdAt ? new Date(log.createdAt).toLocaleString() : 'N/A'
+                            return (
+                              <tr key={log.id}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{createdAt}</td>                             
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">{logUser.name || 'Unknown'}</p>                                                   
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{logUser.role || 'N/A'}</p>                                                          
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{log.action}</td>                                
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{log.entityType || 'N/A'}</td>                                
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{log.ipAddress || 'N/A'}</td>                             
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">                                                           
+                                  <button
+                                    onClick={() => handleViewAuditDetails(log)}       
+                                    className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"                             
+                                    title={tCommon('view')}
+                                  >
+                                    <Eye size={20} />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })
                         )}
                       </tbody>
                     </table>
@@ -303,102 +314,28 @@ function SystemAdminAudit() {
             {activeTab === 'compliance' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-800">Compliance Reports</h2>
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('complianceReports', { defaultValue: 'Compliance Reports' })}</h2>                                                                              
                   <button
                     onClick={handleGenerateComplianceReport}
                     className="btn-primary flex items-center gap-2"
                   >
-                    <FileCheck size={20} /> Generate Report
+                    <FileCheck size={20} /> {tSystemAdmin('generateReport', { defaultValue: 'Generate Report' })}                                               
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {complianceReports.length === 0 ? (
-                    <div className="col-span-3 text-center py-8 text-gray-500">No compliance reports available</div>
-                  ) : (
-                    complianceReports.map(report => (
-                    <div key={report.id} className="card">
-                      <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-lg font-semibold text-gray-800">{report.name}</h3>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(report.status)}`}>
-                          {report.status}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-sm text-gray-600"><span className="font-semibold">Period:</span> {report.period}</p>
-                        <p className="text-sm text-gray-600"><span className="font-semibold">Generated:</span> {report.generatedDate}</p>
-                        <p className="text-sm text-gray-600"><span className="font-semibold">Violations:</span> {report.violations}</p>
-                        <p className="text-sm text-gray-600"><span className="font-semibold">Recommendations:</span> {report.recommendations}</p>
-                        <p className="text-sm text-gray-600">
-                          <span className="font-semibold">Score:</span>
-                          <span className={`ml-1 font-bold ${getScoreColor(report.score)}`}>
-                            {report.score}%
-                          </span>
-                        </p>
-                      </div>
-                      <div className="flex gap-2 mt-4">
-                        <button className="btn-secondary flex-1 text-sm">View</button>
-                        <button className="btn-primary flex-1 text-sm">Download</button>
-                      </div>
-                    </div>
-                  ))
-                  )}
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  {tSystemAdmin('complianceReportsComingSoon', { defaultValue: 'Compliance reports feature coming soon' })}
                 </div>
               </div>
             )}
 
             {activeTab === 'fraud' && (
               <div className="space-y-4">
-                <h2 className="text-xl font-bold text-gray-800">Fraud Detection</h2>
-                <p className="text-gray-600">Monitor suspicious activities and potential fraud patterns</p>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">{tSystemAdmin('fraudDetection', { defaultValue: 'Fraud Detection' })}</h2>                                                                            
+                <p className="text-gray-600 dark:text-gray-400">{tSystemAdmin('monitorSuspiciousActivities', { defaultValue: 'Monitor suspicious activities and potential fraud patterns' })}</p>                                                     
 
-                <div className="space-y-4">
-                  {fraudAlerts.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">No fraud alerts detected</div>
-                  ) : (
-                    fraudAlerts.map(alert => (
-                    <div key={alert.id} className="card">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                          <AlertCircle className="text-red-600" size={24} />
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-800">{alert.type}</h3>
-                            <p className="text-sm text-gray-600">{alert.description}</p>
-                          </div>
-                        </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getSeverityColor(alert.severity)}`}>
-                          {alert.severity}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm text-gray-600"><span className="font-semibold">Detected:</span> {alert.detectedAt}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600"><span className="font-semibold">Status:</span>
-                            <span className={`ml-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(alert.status)}`}>
-                              {alert.status}
-                            </span>
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600"><span className="font-semibold">Risk Score:</span> {alert.riskScore}/100</p>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="text-sm text-gray-600"><span className="font-semibold">Affected Users:</span> {alert.affectedUsers.join(', ')}</p>
-                        </div>
-                        <button
-                          onClick={() => handleInvestigateFraud(alert.id)}
-                          className="btn-secondary"
-                        >
-                          Investigate
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                  )}
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  {tSystemAdmin('fraudDetectionComingSoon', { defaultValue: 'Fraud detection feature coming soon' })}
                 </div>
               </div>
             )}
@@ -416,24 +353,22 @@ function SystemAdminAudit() {
                 </button>
               </div>
               <div className="space-y-3">
-                <p className="text-gray-700"><span className="font-semibold">ID:</span> {selectedAudit.id}</p>
-                <p className="text-gray-700"><span className="font-semibold">Timestamp:</span> {selectedAudit.timestamp}</p>
-                <p className="text-gray-700"><span className="font-semibold">User:</span> {selectedAudit.user} ({selectedAudit.userId})</p>
-                <p className="text-gray-700"><span className="font-semibold">Action:</span> {selectedAudit.action}</p>
-                <p className="text-gray-700"><span className="font-semibold">Target:</span> {selectedAudit.target}</p>
-                <p className="text-gray-700"><span className="font-semibold">Details:</span> {selectedAudit.details}</p>
-                <p className="text-gray-700"><span className="font-semibold">IP Address:</span> {selectedAudit.ipAddress}</p>
-                <p className="text-gray-700"><span className="font-semibold">User Agent:</span> {selectedAudit.userAgent}</p>
-                <p className="text-gray-700"><span className="font-semibold">Status:</span>
-                  <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedAudit.status)}`}>
-                    {selectedAudit.status}
-                  </span>
-                </p>
-                <p className="text-gray-700"><span className="font-semibold">Risk Level:</span>
-                  <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getRiskColor(selectedAudit.riskLevel)}`}>
-                    {selectedAudit.riskLevel}
-                  </span>
-                </p>
+                <p className="text-gray-700"><span className="font-semibold">ID:</span> {selectedAudit.id}</p>                                                  
+                <p className="text-gray-700"><span className="font-semibold">Timestamp:</span> {selectedAudit.createdAt ? new Date(selectedAudit.createdAt).toLocaleString() : 'N/A'}</p>                                    
+                <p className="text-gray-700"><span className="font-semibold">User:</span> {selectedAudit.user?.name || 'Unknown'} ({selectedAudit.user?.role || 'N/A'})</p>                     
+                <p className="text-gray-700"><span className="font-semibold">Action:</span> {selectedAudit.action}</p>                                          
+                <p className="text-gray-700"><span className="font-semibold">Entity Type:</span> {selectedAudit.entityType || 'N/A'}</p>                                          
+                <p className="text-gray-700"><span className="font-semibold">Entity ID:</span> {selectedAudit.entityId || 'N/A'}</p>                                        
+                <p className="text-gray-700"><span className="font-semibold">IP Address:</span> {selectedAudit.ipAddress || 'N/A'}</p>                                   
+                <p className="text-gray-700"><span className="font-semibold">User Agent:</span> {selectedAudit.userAgent || 'N/A'}</p>                                   
+                {selectedAudit.details && (
+                  <div className="text-gray-700">
+                    <span className="font-semibold">Details:</span>
+                    <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-auto max-h-60">
+                      {JSON.stringify(selectedAudit.details, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button

@@ -1,6 +1,6 @@
 # Locales Directory
 
-This directory contains JSON translation files for all supported languages in UMURENGE WALLET.
+This directory contains JSON translation files for all supported languages in IKIMINA WALLET.
 
 ## Supported Languages
 

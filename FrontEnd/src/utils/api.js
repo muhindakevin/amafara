@@ -16,7 +16,7 @@ api.interceptors.request.use((config) => {
   if (!config.headers) {
     config.headers = {}
   }
-  
+
   const token = localStorage.getItem('uw_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -49,9 +49,39 @@ api.interceptors.response.use(
       data: error.response?.data,
       errorMessage: error.response?.data?.message || error.response?.data?.error || error.message
     }
-    
-    console.error(`[API] Error:`, error.config?.method?.toUpperCase(), error.config?.url, errorDetails)
-    
+
+    // Handle connection refused errors (backend not running)
+    if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED')) {
+      console.error(`[API] Backend server is not running!`)
+      console.error(`[API] Please start the backend server by running: cd BackEnd && npm run dev`)
+      console.error(`[API] Or check if the server is running on ${baseURL}`)
+
+      // Only show alert once to avoid spam
+      if (!window.__backendConnectionErrorShown) {
+        window.__backendConnectionErrorShown = true
+        setTimeout(() => {
+          window.__backendConnectionErrorShown = false
+        }, 5000) // Reset after 5 seconds
+
+        // Show user-friendly error message
+        const errorMsg = 'Backend server is not running. Please start the backend server to use this application.'
+        console.error(`[API] ${errorMsg}`)
+
+        // Don't show alert on login/forgot-password pages as user might not be logged in yet
+        const isAuthPage = window.location.pathname === '/login' ||
+          window.location.pathname === '/forgot-password' ||
+          window.location.pathname === '/reset-password' ||
+          window.location.pathname === '/signup'
+
+        if (!isAuthPage) {
+          // You could show a toast notification here instead of console.error
+          // For now, just log it
+        }
+      }
+    } else {
+      console.error(`[API] Error:`, error.config?.method?.toUpperCase(), error.config?.url, errorDetails)
+    }
+
     // Handle 401 Unauthorized - token expired or invalid
     if (error.response?.status === 401) {
       // Remove invalid token
@@ -62,7 +92,9 @@ api.interceptors.response.use(
         window.location.href = '/login'
       }
     }
-    
+
+
+
     return Promise.reject(error)
   }
 )
@@ -77,6 +109,29 @@ export function setAuthToken(token) {
 
 export function getAuthToken() {
   return localStorage.getItem('uw_token')
+}
+
+/**
+ * Get the backend base URL (without /api)
+ * Used for constructing URLs to static files like profile images
+ */
+export function getBackendBaseURL() {
+  const apiBaseURL = baseURL.replace('/api', '')
+  return apiBaseURL || 'http://localhost:4000'
+}
+
+/**
+ * Construct full URL for uploaded files (profile images, documents, etc.)
+ * @param {string} filePath - Relative path like /uploads/profile-images/filename.jpg
+ * @returns {string} Full URL to the file
+ */
+export function getFileUrl(filePath) {
+  if (!filePath) return ''
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    return filePath // Already a full URL
+  }
+  const backendURL = getBackendBaseURL()
+  return `${backendURL}${filePath.startsWith('/') ? filePath : '/' + filePath}`
 }
 
 export default api

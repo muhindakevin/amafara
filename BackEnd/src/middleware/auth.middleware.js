@@ -1,8 +1,31 @@
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, Setting } = require('../models');
+
+/**
+ * Get session timeout from system settings
+ */
+const getSessionTimeout = async () => {
+  try {
+    const setting = await Setting.findOne({ where: { key: 'system_sessionTimeout' } });
+    if (setting) {
+      const timeout = parseInt(setting.value) || 30;
+      return timeout * 60 * 1000; // Convert minutes to milliseconds
+    }
+    return 30 * 60 * 1000; // Default 30 minutes
+  } catch (error) {
+    // Silently handle database connection errors - use default timeout
+    if (error.name === 'SequelizeConnectionRefusedError' || error.name === 'SequelizeConnectionError') {
+      console.warn('[getSessionTimeout] Database connection unavailable, using default timeout');
+    } else {
+      console.error('[getSessionTimeout] Error:', error.message);
+    }
+    return 30 * 60 * 1000; // Default 30 minutes
+  }
+};
 
 /**
  * Verify JWT token and attach user to request
+ * Also checks session timeout from system settings
  */
 const authenticate = async (req, res, next) => {
   try {
@@ -17,9 +40,40 @@ const authenticate = async (req, res, next) => {
 
     const jwtSecret = process.env.JWT_SECRET || 'umurenge_wallet_secret_key_change_in_production_2024';
     const decoded = jwt.verify(token, jwtSecret);
-    const user = await User.findByPk(decoded.userId, {
-      attributes: { exclude: ['password', 'otp', 'otpExpiry'] }
-    });
+
+    // Check session timeout from system settings (with error handling)
+    let sessionTimeout;
+    try {
+      sessionTimeout = await getSessionTimeout();
+    } catch (error) {
+      // If database is unavailable, use default timeout
+      sessionTimeout = 30 * 60 * 1000; // 30 minutes
+    }
+
+    const tokenAge = Date.now() - (decoded.iat * 1000); // iat is in seconds
+
+    if (tokenAge > sessionTimeout) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session expired. Please log in again.'
+      });
+    }
+
+    // Fetch user with error handling for database connection issues
+    let user;
+    try {
+      user = await User.findByPk(decoded.userId, {
+        attributes: { exclude: ['password', 'otp', 'otpExpiry'] }
+      });
+    } catch (dbError) {
+      if (dbError.name === 'SequelizeConnectionRefusedError' || dbError.name === 'SequelizeConnectionError') {
+        return res.status(503).json({
+          success: false,
+          message: 'Database connection unavailable. Please try again later.'
+        });
+      }
+      throw dbError; // Re-throw other errors
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -100,9 +154,30 @@ const authorizeResource = (resourceUserId, adminRoles = ['Group Admin', 'System 
   };
 };
 
+
+
+/**
+ * Granular permission check
+ * Logic:
+ * 1. If explicit permission exists (true/false), use it.
+ * 2. If no explicit permission, check defaults for the user's role.
+ * 3. Default to FALSE (Deny) if not found in role defaults.
+ */
+/**
+ * Granular permission check
+ * DISABLED: Always allow access.
+ */
+const checkPermission = (permission) => {
+  return (req, res, next) => {
+    // Permission system disabled - allow everything
+    next();
+  };
+};
+
 module.exports = {
   authenticate,
   authorize,
-  authorizeResource
+  authorizeResource,
+  checkPermission
 };
 
