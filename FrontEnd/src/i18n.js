@@ -14,50 +14,46 @@ i18n
   .init({
     // Fallback language
     fallbackLng: 'en',
-    
+
     // Default namespace
     defaultNS: 'common',
     ns: ['common', 'dashboard', 'navigation', 'forms', 'notifications', 'settings', 'errors', 'auth', 'agent', 'cashier', 'secretary', 'systemAdmin', 'groupAdmin', 'member', 'landing'],
-    
+
     // Debug mode (set to false in production)
     debug: false,
-    
+
     // Interpolation options
     interpolation: {
       escapeValue: false, // React already escapes values
     },
-    
+
     // Backend options
     backend: {
       loadPath: '/locales/{{lng}}/{{ns}}.json',
       // Allow cross-origin requests
       crossDomain: false,
     },
-    
+
     // Language detection options
     detection: {
       // Order and from where user language should be detected
       order: ['localStorage', 'navigator', 'htmlTag'],
-      
+
       // Keys or params to lookup language from
       lookupLocalStorage: 'umurenge-language',
       caches: ['localStorage'],
     },
-    
+
     // React options
     react: {
       useSuspense: false, // Set to false to avoid Suspense issues
     },
-    
+
     // Supported languages
     supportedLngs: [
-      'en', 'rw', 'fr', 'sw', 'ar', 'es', 'pt', 'de', 'it', 'tr',
-      'zh', 'zh-TW', 'ja', 'ko', 'hi', 'ur', 'ru', 'uk', 'nl', 'el',
-      'pl', 'sv', 'no', 'fi', 'da', 'ro', 'hu', 'cs', 'sk', 'bg',
-      'sr', 'hr', 'he', 'am', 'yo', 'zu', 'af', 'th', 'ms', 'id',
-      'tl', 'vi', 'bn', 'ne', 'ta', 'te', 'fa', 'pt-BR', 'sw-KE'
+      'en', 'rw', 'fr'
     ],
-    
+
     // Language names for display
     load: 'languageOnly', // Only load language code, not region (e.g., 'en' not 'en-US')
   })

@@ -80,6 +80,7 @@ import SystemAdminDashboard from './pages/SystemAdminDashboard'
 import SystemAdminUsers from './pages/SystemAdminUsers'
 import SystemAdminBranches from './pages/SystemAdminBranches'
 import SystemAdminAgents from './pages/SystemAdminAgents'
+import SystemAdminGroups from './pages/SystemAdminGroups'
 import SystemAdminClients from './pages/SystemAdminClients'
 import SystemAdminLoans from './pages/SystemAdminLoans'
 import SystemAdminTransactions from './pages/SystemAdminTransactions'
@@ -306,6 +307,7 @@ function App() {
                     <Route path="/system-admin/users" element={<SystemAdminUsers />} />
                     <Route path="/system-admin/branches" element={<SystemAdminBranches />} />
                     <Route path="/system-admin/agents" element={<SystemAdminAgents />} />
+                    <Route path="/system-admin/groups" element={<SystemAdminGroups />} />
                     <Route path="/system-admin/clients" element={<SystemAdminClients />} />
                     <Route path="/system-admin/loans" element={<SystemAdminLoans />} />
                     <Route path="/system-admin/transactions" element={<SystemAdminTransactions />} />

@@ -34,20 +34,20 @@ function SystemAdminDashboard() {
               response: err.response?.data,
               status: err.response?.status
             })
-            return {data: {success: false, data: {count: 0}}}
+            return { data: { success: false, data: { count: 0 } } }
           }),
-          api.get('/system-admin/branches/count').catch(()=>({data:{success: false, data: {count: 0}}})),
-          api.get('/system-admin/agents/count').catch(()=>({data:{success: false, data: {count: 0}}})),
-          api.get('/system-admin/groups/count').catch(()=>({data:{success: false, data: {count: 0}}})),
-          api.get('/system-admin/members/count').catch(()=>({data:{success: false, data: {count: 0}}})),
-          api.get('/groups', { params: { viewAll: 'true' } }).catch(()=>({data:{success: false, data: []}})),
-          api.get('/loans').catch(()=>({data:{success: false, data: []}})),
+          api.get('/system-admin/branches/count').catch(() => ({ data: { success: false, data: { count: 0 } } })),
+          api.get('/system-admin/agents/count').catch(() => ({ data: { success: false, data: { count: 0 } } })),
+          api.get('/system-admin/groups/count').catch(() => ({ data: { success: false, data: { count: 0 } } })),
+          api.get('/system-admin/members/count').catch(() => ({ data: { success: false, data: { count: 0 } } })),
+          api.get('/groups', { params: { viewAll: 'true' } }).catch(() => ({ data: { success: false, data: [] } })),
+          api.get('/loans').catch(() => ({ data: { success: false, data: [] } })),
           api.get('/transactions/count').catch((err) => {
             console.error('[SystemAdminDashboard] Failed to fetch transactions count:', err)
-            return {data: {success: false, data: {count: 0}}}
+            return { data: { success: false, data: { count: 0 } } }
           })
         ])
-        
+
         // Get total users count (all users including agents, group admin, secretary, cashier, members, system admin)
         // Try multiple possible response structures
         let totalUsers = 0
@@ -61,10 +61,10 @@ function SystemAdminDashboard() {
             totalUsers = Number(users.data.count) || 0
           }
         }
-        
+
         console.log('[SystemAdminDashboard] Users API Response:', users?.data)
         console.log('[SystemAdminDashboard] Total Users Count:', totalUsers)
-        
+
         // Calculate total savings from all groups
         let totalSavings = 0
         if (groups?.data?.success && groups?.data?.data) {
@@ -72,13 +72,13 @@ function SystemAdminDashboard() {
             return sum + (parseFloat(group.totalSavings) || 0)
           }, 0)
         }
-        
+
         // Get total loans count
         let totalLoans = 0
         if (loans?.data?.success && loans?.data?.data) {
           totalLoans = Array.isArray(loans.data.data) ? loans.data.data.length : 0
         }
-        
+
         // Get total transactions count (all transactions across all groups)
         let totalTransactions = 0
         if (transactionsCount?.data?.success && transactionsCount?.data?.data?.count !== undefined) {
@@ -87,7 +87,7 @@ function SystemAdminDashboard() {
           totalTransactions = transactionsCount.data.data.count
         }
         console.log('[SystemAdminDashboard] Total Transactions:', totalTransactions, 'Response:', transactionsCount?.data)
-        
+
         setSys({
           totalUsers: totalUsers,
           totalBranches: branches?.data?.data?.count || 0,
@@ -123,46 +123,46 @@ function SystemAdminDashboard() {
     if (!log.details || typeof log.details !== 'object') {
       return `${log.action || 'Activity'} on ${log.entityType || 'system'}`
     }
-    
+
     const details = log.details
     const action = log.action || ''
     const actionUpper = action.toUpperCase()
-    
+
     // Format based on action type
     if (actionUpper.includes('LOAN_REJECTED')) {
       const reason = details.reason || 'Not specified'
       const memberName = details.memberName || (details.memberId ? `Member ID: ${details.memberId}` : 'Member')
       return `Loan request rejected for ${memberName}. Reason: ${reason}`
     }
-    
+
     if (actionUpper.includes('LOAN_APPROVED')) {
       const amount = details.amount ? `${parseFloat(details.amount).toLocaleString()} RWF` : 'amount not specified'
       const memberName = details.memberName || (details.memberId ? `Member ID: ${details.memberId}` : 'Member')
       return `Loan request approved for ${memberName}. Amount: ${amount}`
     }
-    
+
     if (actionUpper.includes('MEMBER_REJECTED') || actionUpper.includes('MEMBER_APPLICATION_REJECTED')) {
       const reason = details.reason || details.rejectionReason || 'Not specified'
       const memberName = details.memberName || (details.memberId ? `Member ID: ${details.memberId}` : 'Member')
       return `Member application rejected for ${memberName}. Reason: ${reason}`
     }
-    
+
     if (actionUpper.includes('MEMBER_APPROVED') || actionUpper.includes('MEMBER_APPLICATION_APPROVED')) {
       const memberName = details.memberName || (details.memberId ? `Member ID: ${details.memberId}` : 'Member')
       return `Member application approved for ${memberName}`
     }
-    
+
     if (actionUpper.includes('CONTRIBUTION')) {
       const amount = details.amount ? `${parseFloat(details.amount).toLocaleString()} RWF` : 'amount not specified'
       const paymentMethod = details.paymentMethod || 'payment method not specified'
       const status = details.status || 'recorded'
       return `Contribution of ${amount} via ${paymentMethod} - ${status}`
     }
-    
+
     if (details.reason) {
       return details.reason
     }
-    
+
     if (details.amount) {
       const amount = `${parseFloat(details.amount).toLocaleString()} RWF`
       if (details.memberName) {
@@ -170,11 +170,11 @@ function SystemAdminDashboard() {
       }
       return `Amount: ${amount}`
     }
-    
+
     if (details.memberName) {
       return details.memberName
     }
-    
+
     // Default: format action name nicely
     return `${action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} on ${log.entityType || 'system'}`
   }
@@ -182,33 +182,33 @@ function SystemAdminDashboard() {
   // Fetch recent activities from audit logs
   useEffect(() => {
     let mounted = true
-    ;(async () => {
-      try {
-        const { data } = await api.get('/audit-logs', { params: { limit: 20 } })
-        if (mounted && data?.success) {
-          const activities = (data.data || []).map(log => {
-            const user = log.user || {}
-            return {
-              id: log.id,
-              type: log.entityType?.toLowerCase() || 'system',
-              title: log.action,
-              description: formatAuditLogDescription(log),
-              user: user.name || 'System',
-              entityType: log.entityType,
-              entityId: log.entityId,
-              time: log.createdAt ? new Date(log.createdAt).toLocaleString() : 'Unknown',
-              status: 'completed',
-              action: log.action,
-              details: log.details
-            }
-          })
-          setRecentActivities(activities)
+      ; (async () => {
+        try {
+          const { data } = await api.get('/audit-logs', { params: { limit: 20 } })
+          if (mounted && data?.success) {
+            const activities = (data.data || []).map(log => {
+              const user = log.user || {}
+              return {
+                id: log.id,
+                type: log.entityType?.toLowerCase() || 'system',
+                title: log.action,
+                description: formatAuditLogDescription(log),
+                user: user.name || 'System',
+                entityType: log.entityType,
+                entityId: log.entityId,
+                time: log.createdAt ? new Date(log.createdAt).toLocaleString() : 'Unknown',
+                status: 'completed',
+                action: log.action,
+                details: log.details
+              }
+            })
+            setRecentActivities(activities)
+          }
+        } catch (err) {
+          console.error('Failed to fetch recent activities:', err)
+          if (mounted) setRecentActivities([])
         }
-      } catch (err) {
-        console.error('Failed to fetch recent activities:', err)
-        if (mounted) setRecentActivities([])
-      }
-    })()
+      })()
     return () => { mounted = false }
   }, [])
 
@@ -216,54 +216,54 @@ function SystemAdminDashboard() {
   useEffect(() => {
     if (selectedTab === 'communications') {
       let mounted = true
-      ;(async () => {
-        try {
-          // Fetch all announcements
-          const annRes = await api.get('/announcements').catch(()=>({data:null}))
-          
-          // Fetch notifications sent to system admin
-          const notifRes = await api.get('/notifications').catch(()=>({data:null}))
-          
-          if (mounted) {
-            // Get all announcements (group admins and agents create announcements)
-            const allAnnouncements = annRes?.data?.success ? (annRes.data.data || []) : []
-            
-            // Get notifications that might be messages from group admin/agents
-            const notifications = notifRes?.data?.success ? (notifRes.data.data || []) : []
-            
-            // Combine announcements with relevant notifications
-            const combined = [
-              ...allAnnouncements.map(ann => ({
-                id: ann.id,
-                title: ann.title,
-                content: ann.content,
-                createdAt: ann.createdAt,
-                sentAt: ann.sentAt,
-                targetAudience: ann.targetAudience || 'All Groups',
-                creator: ann.creator,
-                type: 'announcement'
-              })),
-              ...notifications.filter(notif => 
-                notif.type === 'message' || notif.type === 'announcement'
-              ).map(notif => ({
-                id: `notif_${notif.id}`,
-                title: notif.title || 'Message',
-                content: notif.content || notif.message,
-                createdAt: notif.createdAt,
-                sentAt: notif.createdAt,
-                targetAudience: 'System Admin',
-                creator: null,
-                type: 'notification'
-              }))
-            ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-            
-            setAnnouncements(combined)
+        ; (async () => {
+          try {
+            // Fetch all announcements
+            const annRes = await api.get('/announcements').catch(() => ({ data: null }))
+
+            // Fetch notifications sent to system admin
+            const notifRes = await api.get('/notifications').catch(() => ({ data: null }))
+
+            if (mounted) {
+              // Get all announcements (group admins and agents create announcements)
+              const allAnnouncements = annRes?.data?.success ? (annRes.data.data || []) : []
+
+              // Get notifications that might be messages from group admin/agents
+              const notifications = notifRes?.data?.success ? (notifRes.data.data || []) : []
+
+              // Combine announcements with relevant notifications
+              const combined = [
+                ...allAnnouncements.map(ann => ({
+                  id: ann.id,
+                  title: ann.title,
+                  content: ann.content,
+                  createdAt: ann.createdAt,
+                  sentAt: ann.sentAt,
+                  targetAudience: ann.targetAudience || 'All Groups',
+                  creator: ann.creator,
+                  type: 'announcement'
+                })),
+                ...notifications.filter(notif =>
+                  notif.type === 'message' || notif.type === 'announcement'
+                ).map(notif => ({
+                  id: `notif_${notif.id}`,
+                  title: notif.title || 'Message',
+                  content: notif.content || notif.message,
+                  createdAt: notif.createdAt,
+                  sentAt: notif.createdAt,
+                  targetAudience: 'System Admin',
+                  creator: null,
+                  type: 'notification'
+                }))
+              ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+              setAnnouncements(combined)
+            }
+          } catch (err) {
+            console.error('Failed to fetch announcements:', err)
+            if (mounted) setAnnouncements([])
           }
-        } catch (err) {
-          console.error('Failed to fetch announcements:', err)
-          if (mounted) setAnnouncements([])
-        }
-      })()
+        })()
       return () => { mounted = false }
     }
   }, [selectedTab])
@@ -284,10 +284,10 @@ function SystemAdminDashboard() {
 
   const handleActivityClick = (activity) => {
     if (!activity.entityType || !activity.entityId) return
-    
+
     const entityType = activity.entityType.toLowerCase()
     const entityId = activity.entityId
-    
+
     // Navigate based on entity type
     if (entityType.includes('user')) {
       navigate(`/system-admin/users`)
@@ -352,11 +352,10 @@ function SystemAdminDashboard() {
               {systemAlerts.map((alert, index) => (
                 <div
                   key={index}
-                  className={`p-4 rounded-xl border ${
-                    alert.priority === 'high' ? 'bg-red-50 border-red-200' :
+                  className={`p-4 rounded-xl border ${alert.priority === 'high' ? 'bg-red-50 border-red-200' :
                     alert.priority === 'medium' ? 'bg-yellow-50 border-yellow-200' :
-                    'bg-blue-50 border-blue-200'
-                  }`}
+                      'bg-blue-50 border-blue-200'
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -379,15 +378,14 @@ function SystemAdminDashboard() {
         <div className="bg-white rounded-2xl shadow-lg">
           <div className="border-b border-gray-200">
             <div className="flex gap-2 p-2 overflow-x-auto">
-              {['overview', 'users', 'branches', 'agents', 'clients', 'loans', 'transactions', 'system', 'audit', 'reports', 'communications', 'support', 'learn-grow'].map((tab) => (
+              {['overview', 'users', 'branches', 'agents', 'groups', 'clients', 'loans', 'transactions', 'system', 'audit', 'reports', 'communications', 'support', 'learn-grow'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setSelectedTab(tab)}
-                  className={`px-4 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                    selectedTab === tab
-                      ? 'bg-primary-500 text-white shadow-md'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
+                  className={`px-4 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${selectedTab === tab
+                    ? 'bg-primary-500 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-gray-100'
+                    }`}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1).replace('-', ' ')}
                 </button>
@@ -396,6 +394,28 @@ function SystemAdminDashboard() {
           </div>
 
           <div className="p-6">
+            {selectedTab === 'groups' && (
+              <div className="space-y-6">
+                {/* Embed SystemAdminGroups but assume we need modifications to remove Layout if embedded. 
+                     For now, let's provide a direct link button or a simplified view 
+                     to avoid 'Layout' duplication until we refactor SystemAdminGroups to be embeddable.
+                     OR, we can perform a dynamic import or just modify SystemAdminGroups now. 
+                 */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+                  <h2 className="text-xl font-bold mb-4">Group Management</h2>
+                  <p className="text-gray-600 mb-6">Manage all savings groups (Ibimina), their admins, and settings.</p>
+                  <button
+                    onClick={() => window.location.href = '/system-admin/groups'}
+                    className="btn-primary"
+                  >
+                    Go to Group Management Page
+                  </button>
+                  <p className="mt-4 text-sm text-gray-500">
+                    (Full management interface available on dedicated page)
+                  </p>
+                </div>
+              </div>
+            )}
             {selectedTab === 'overview' && (
               <div className="space-y-6">
                 {/* Recent Activities */}
@@ -423,14 +443,13 @@ function SystemAdminDashboard() {
                               <p className="text-xs text-gray-500 dark:text-gray-500">{activity.time}</p>
                             </div>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            activity.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${activity.status === 'completed' ? 'bg-green-100 text-green-700' :
                             activity.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                            activity.status === 'flagged' ? 'bg-red-100 text-red-700' :
-                            activity.status === 'approved' ? 'bg-blue-100 text-blue-700' :
-                            activity.status === 'published' ? 'bg-purple-100 text-purple-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
+                              activity.status === 'flagged' ? 'bg-red-100 text-red-700' :
+                                activity.status === 'approved' ? 'bg-blue-100 text-blue-700' :
+                                  activity.status === 'published' ? 'bg-purple-100 text-purple-700' :
+                                    'bg-gray-100 text-gray-700'
+                            }`}>
                             {activity.status}
                           </span>
                         </div>
@@ -443,7 +462,7 @@ function SystemAdminDashboard() {
                 <div>
                   <h2 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <button 
+                    <button
                       onClick={() => navigate('/system-admin/users')}
                       className="card text-center hover:shadow-xl transition-all cursor-pointer"
                     >
@@ -451,7 +470,7 @@ function SystemAdminDashboard() {
                       <h3 className="font-semibold text-gray-800">Manage Users</h3>
                       <p className="text-sm text-gray-600">Register, edit, or delete users</p>
                     </button>
-                    <button 
+                    <button
                       onClick={() => navigate('/system-admin/branches')}
                       className="card text-center hover:shadow-xl transition-all cursor-pointer"
                     >
@@ -459,7 +478,7 @@ function SystemAdminDashboard() {
                       <h3 className="font-semibold text-gray-800">Branch Management</h3>
                       <p className="text-sm text-gray-600">Create and manage branches</p>
                     </button>
-                    <button 
+                    <button
                       onClick={() => navigate('/system-admin/clients')}
                       className="card text-center hover:shadow-xl transition-all cursor-pointer"
                     >
@@ -467,7 +486,7 @@ function SystemAdminDashboard() {
                       <h3 className="font-semibold text-gray-800">Client Management</h3>
                       <p className="text-sm text-gray-600">View and manage clients</p>
                     </button>
-                    <button 
+                    <button
                       onClick={() => navigate('/system-admin/learn-grow')}
                       className="card text-center hover:shadow-xl transition-all cursor-pointer"
                     >
@@ -485,7 +504,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">User Management</h2>
                 <p className="text-gray-600">Register, edit, or delete users (agents, clients, managers, etc.)</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/users')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -493,7 +512,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Register Users</h3>
                     <p className="text-sm text-gray-600">Create new user accounts</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/users')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -501,7 +520,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Approve Registrations</h3>
                     <p className="text-sm text-gray-600">Verify and approve user profiles</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/users')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -518,7 +537,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Branch & Location Management</h2>
                 <p className="text-gray-600">Create and manage Umurenge SACCO branches</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/branches')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -526,7 +545,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Create Branches</h3>
                     <p className="text-sm text-gray-600">Add new SACCO branches</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/branches')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -534,7 +553,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Assign Agents</h3>
                     <p className="text-sm text-gray-600">Assign agents per branch</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/branches')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -551,7 +570,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Agent Management</h2>
                 <p className="text-gray-600">Approve, suspend, and monitor agent performance</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/agents')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -559,7 +578,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Approve Agents</h3>
                     <p className="text-sm text-gray-600">Approve or suspend agent accounts</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/agents')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -567,7 +586,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Assign Clients</h3>
                     <p className="text-sm text-gray-600">Assign clients to agents</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/agents')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -584,7 +603,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Client Management</h2>
                 <p className="text-gray-600">View all clients' profiles and manage applications</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/clients')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -592,7 +611,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">View Profiles</h3>
                     <p className="text-sm text-gray-600">View all client profiles and ID info</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/clients')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -600,7 +619,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Track Repayments</h3>
                     <p className="text-sm text-gray-600">Monitor loan repayment behavior</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/clients')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -617,7 +636,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Loan & Credit Management</h2>
                 <p className="text-gray-600">Define loan products and manage credit scoring</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/loans')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -625,7 +644,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Define Products</h3>
                     <p className="text-sm text-gray-600">Define loan products and structures</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/loans')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -633,7 +652,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Credit Scoring</h3>
                     <p className="text-sm text-gray-600">Configure credit parameters</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/loans')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -650,7 +669,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Transaction Management</h2>
                 <p className="text-gray-600">View, approve, and manage all transactions</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/transactions')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -658,7 +677,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">View Transactions</h3>
                     <p className="text-sm text-gray-600">View all deposits and withdrawals</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/transactions')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -666,7 +685,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Approve Flagged</h3>
                     <p className="text-sm text-gray-600">Approve flagged transactions</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/transactions')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -683,7 +702,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">System Configuration</h2>
                 <p className="text-gray-600">Configure system settings and integrations</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/system')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -691,7 +710,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">System Settings</h3>
                     <p className="text-sm text-gray-600">Configure branding and terms</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/system')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -699,7 +718,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">API Integrations</h3>
                     <p className="text-sm text-gray-600">Manage mobile money and bank APIs</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/system')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -716,7 +735,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Audit & Compliance</h2>
                 <p className="text-gray-600">Access audit trails and monitor compliance</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/audit')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -724,7 +743,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Audit Trail</h3>
                     <p className="text-sm text-gray-600">Access complete audit trail</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/audit')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -732,7 +751,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Compliance Reports</h3>
                     <p className="text-sm text-gray-600">Generate compliance reports</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/audit')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -749,7 +768,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Reporting & Analytics</h2>
                 <p className="text-gray-600">Access analytics dashboards and generate reports</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/reports')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -757,7 +776,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Analytics Dashboard</h3>
                     <p className="text-sm text-gray-600">View performance analytics</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/reports')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -765,7 +784,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Generate Reports</h3>
                     <p className="text-sm text-gray-600">Export PDF/Excel reports</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/reports')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -784,14 +803,14 @@ function SystemAdminDashboard() {
                     <h2 className="text-xl font-bold text-gray-800 dark:text-white">Communication & Announcements</h2>
                     <p className="text-gray-600 dark:text-gray-400">Broadcast messages and send targeted notifications</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/communications')}
                     className="btn-primary flex items-center gap-2"
                   >
                     <MessageCircle size={18} /> View All
                   </button>
                 </div>
-                
+
                 {announcements.length === 0 ? (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     No announcements. Announcements from group admins or agents will appear here.
@@ -811,9 +830,8 @@ function SystemAdminDashboard() {
                               {announcement.createdAt ? new Date(announcement.createdAt).toLocaleString() : 'Unknown date'}
                             </p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            announcement.sentAt ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                          }`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${announcement.sentAt ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                            }`}>
                             {announcement.sentAt ? 'Sent' : 'Draft'}
                           </span>
                         </div>
@@ -827,9 +845,9 @@ function SystemAdminDashboard() {
                     ))}
                   </div>
                 )}
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/communications')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -837,7 +855,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800 dark:text-white">Broadcast Messages</h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Send system-wide messages</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/communications')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -845,7 +863,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800 dark:text-white">Targeted Notifications</h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Send to specific groups</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/communications')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -862,7 +880,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Support & Maintenance</h2>
                 <p className="text-gray-600">Assign support tickets and perform system maintenance</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/support')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -870,7 +888,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Support Tickets</h3>
                     <p className="text-sm text-gray-600">Assign and monitor tickets</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/support')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -878,7 +896,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">System Updates</h3>
                     <p className="text-sm text-gray-600">Perform updates and backups</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/support')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -895,7 +913,7 @@ function SystemAdminDashboard() {
                 <h2 className="text-xl font-bold text-gray-800">Learn & Grow Content Management</h2>
                 <p className="text-gray-600">Educate and empower users on digital finance and savings</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/learn-grow')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -903,7 +921,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Upload Content</h3>
                     <p className="text-sm text-gray-600">Upload PDFs, videos, tutorials</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/learn-grow')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -911,7 +929,7 @@ function SystemAdminDashboard() {
                     <h3 className="font-semibold text-gray-800">Access Levels</h3>
                     <p className="text-sm text-gray-600">Set public, agent, or client access</p>
                   </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/system-admin/learn-grow')}
                     className="card text-center hover:shadow-xl transition-all cursor-pointer"
                   >
@@ -929,25 +947,25 @@ function SystemAdminDashboard() {
         <div className="card">
           <h2 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button 
+            <button
               onClick={() => navigate('/system-admin/users')}
               className="btn-primary flex items-center justify-center gap-2 py-4 text-lg"
             >
               <Plus size={20} /> Register User
             </button>
-            <button 
+            <button
               onClick={() => navigate('/system-admin/branches')}
               className="btn-secondary flex items-center justify-center gap-2 py-4 text-lg"
             >
               <Building2 size={20} /> Create Branch
             </button>
-            <button 
+            <button
               onClick={() => navigate('/system-admin/reports')}
               className="btn-secondary flex items-center justify-center gap-2 py-4 text-lg"
             >
               <BarChart3 size={20} /> Generate Report
             </button>
-            <button 
+            <button
               onClick={() => navigate('/system-admin/communications')}
               className="btn-secondary flex items-center justify-center gap-2 py-4 text-lg"
             >
