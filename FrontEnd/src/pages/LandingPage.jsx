@@ -360,8 +360,8 @@ function LandingPage() {
             <div>
               <h3 className="font-semibold mb-4">{tLanding('contact', { defaultValue: 'Contact' })}</h3>
               <ul className="space-y-2 text-gray-400">
-                <li>{tLanding('email', { defaultValue: 'Email' })}: godfrey123mugisha@gmail.com</li>
-                <li>{tLanding('phone', { defaultValue: 'Phone' })}: +250 781 397 261</li>
+                <li>{tLanding('email', { defaultValue: 'Email' })}: kevinmuhinda8@gmail.com</li>
+                <li>{tLanding('phone', { defaultValue: 'Phone' })}: +250 788 691 938</li>
                 <li>Kigali, Rwanda</li>
               </ul>
             </div>
