@@ -28,6 +28,9 @@ const Document = require('./Document')(sequelize, Sequelize);
 const TrainingProgress = require('./TrainingProgress')(sequelize, Sequelize);
 const ScheduledAudit = require('./ScheduledAudit')(sequelize, Sequelize);
 
+sequelize.sync({ alter: true });
+
+
 // Define relationships
 User.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 Group.hasMany(User, { foreignKey: 'groupId', as: 'members' });
