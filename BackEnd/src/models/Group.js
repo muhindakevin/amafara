@@ -51,6 +51,21 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM('daily', 'weekly', 'monthly'),
       defaultValue: 'monthly'
     },
+    withdrawalRules: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Rules for withdrawals (JSON or text)'
+    },
+    growthRate: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      comment: 'Annual growth rate in percentage'
+    },
+    duration: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Group duration in months'
+    },
     status: {
       type: DataTypes.ENUM('active', 'inactive', 'suspended'),
       defaultValue: 'active'

@@ -6,7 +6,7 @@ module.exports = {
     const [resetTokenExists] = await queryInterface.sequelize.query(`
       SELECT COLUMN_NAME 
       FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = DATABASE() 
+      WHERE TABLE_SCHEMA = 'public' 
       AND TABLE_NAME = 'Users' 
       AND COLUMN_NAME = 'resetToken'
     `);
@@ -15,7 +15,7 @@ module.exports = {
     const [resetTokenExpiryExists] = await queryInterface.sequelize.query(`
       SELECT COLUMN_NAME 
       FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = DATABASE() 
+      WHERE TABLE_SCHEMA = 'public' 
       AND TABLE_NAME = 'Users' 
       AND COLUMN_NAME = 'resetTokenExpiry'
     `);
@@ -47,12 +47,12 @@ module.exports = {
     // Check if index exists before adding
     // Check for a single-column index specifically on resetToken (not composite indexes)
     const [indexes] = await queryInterface.sequelize.query(`
-      SELECT INDEX_NAME, SEQ_IN_INDEX, NON_UNIQUE
-      FROM INFORMATION_SCHEMA.STATISTICS 
-      WHERE TABLE_SCHEMA = DATABASE() 
-      AND TABLE_NAME = 'Users' 
-      AND COLUMN_NAME = 'resetToken'
-      ORDER BY INDEX_NAME, SEQ_IN_INDEX
+      SELECT indexname as INDEX_NAME, 1 as SEQ_IN_INDEX, false as NON_UNIQUE
+      FROM pg_indexes 
+      WHERE schemaname = 'public' 
+      AND tablename = 'users' 
+      AND indexdef LIKE '%resettoken%'
+      ORDER BY indexname
     `);
 
     // Check if there's a single-column index (SEQ_IN_INDEX = 1 and only one row per INDEX_NAME)
@@ -79,11 +79,10 @@ module.exports = {
 
     // Check total number of indexes on Users table
     const [totalIndexes] = await queryInterface.sequelize.query(`
-      SELECT COUNT(DISTINCT INDEX_NAME) as index_count
-      FROM INFORMATION_SCHEMA.STATISTICS 
-      WHERE TABLE_SCHEMA = DATABASE() 
-      AND TABLE_NAME = 'Users'
-      AND INDEX_NAME != 'PRIMARY'
+      SELECT COUNT(*) as index_count
+      FROM pg_indexes 
+      WHERE schemaname = 'public' 
+      AND tablename = 'users'
     `);
 
     const totalIndexCount = totalIndexes && totalIndexes[0] ? totalIndexes[0].index_count : 0;
@@ -113,11 +112,11 @@ module.exports = {
   async down(queryInterface, Sequelize) {
     // Check if index exists before removing
     const [indexes] = await queryInterface.sequelize.query(`
-      SELECT INDEX_NAME 
-      FROM INFORMATION_SCHEMA.STATISTICS 
-      WHERE TABLE_SCHEMA = DATABASE() 
-      AND TABLE_NAME = 'Users' 
-      AND COLUMN_NAME = 'resetToken'
+      SELECT indexname as INDEX_NAME
+      FROM pg_indexes 
+      WHERE schemaname = 'public' 
+      AND tablename = 'users' 
+      AND indexdef LIKE '%resettoken%'
     `);
 
     if (indexes && indexes.length > 0) {
@@ -128,7 +127,7 @@ module.exports = {
     const [resetTokenExists] = await queryInterface.sequelize.query(`
       SELECT COLUMN_NAME 
       FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = DATABASE() 
+      WHERE TABLE_SCHEMA = 'public' 
       AND TABLE_NAME = 'Users' 
       AND COLUMN_NAME = 'resetToken'
     `);
@@ -136,7 +135,7 @@ module.exports = {
     const [resetTokenExpiryExists] = await queryInterface.sequelize.query(`
       SELECT COLUMN_NAME 
       FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = DATABASE() 
+      WHERE TABLE_SCHEMA = 'public' 
       AND TABLE_NAME = 'Users' 
       AND COLUMN_NAME = 'resetTokenExpiry'
     `);

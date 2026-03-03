@@ -38,6 +38,30 @@ module.exports = {
     } catch (error) {
       // If the above fails, try PostgreSQL syntax
       try {
+        // First, add missing enum values
+        const missingValues = [
+          'loan_approval_override',
+          'withdrawal_approval', 
+          'contribution_change',
+          'saving_amount_change',
+          'fine_change',
+          'fine_amount_change',
+          'interest_rate_change'
+        ];
+        
+        for (const value of missingValues) {
+          try {
+            await queryInterface.sequelize.query(`
+              DO $$ BEGIN
+                ALTER TYPE "public"."enum_Votes_type" ADD VALUE '${value}';
+              EXCEPTION WHEN duplicate_object THEN null;
+              END $$;
+            `);
+          } catch (addError) {
+            // Ignore if value already exists
+          }
+        }
+        
         await queryInterface.sequelize.query(`
           ALTER TABLE "Votes" 
           DROP CONSTRAINT IF EXISTS "Votes_type_check";

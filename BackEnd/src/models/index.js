@@ -27,6 +27,8 @@ const ComplianceViolation = require('./ComplianceViolation')(sequelize, Sequeliz
 const Document = require('./Document')(sequelize, Sequelize);
 const TrainingProgress = require('./TrainingProgress')(sequelize, Sequelize);
 const ScheduledAudit = require('./ScheduledAudit')(sequelize, Sequelize);
+const LoanInstallment = require('./LoanInstallment')(sequelize, Sequelize);
+const Newsletter = require('./Newsletter')(sequelize, Sequelize);
 
 sequelize.sync({ alter: true });
 
@@ -167,6 +169,9 @@ Group.hasMany(Document, { foreignKey: 'groupId', as: 'documents' });
 Document.belongsTo(User, { foreignKey: 'uploadedBy', as: 'uploader' });
 User.hasMany(Document, { foreignKey: 'uploadedBy', as: 'uploadedDocuments' });
 
+Loan.hasMany(LoanInstallment, { foreignKey: 'loanId', as: 'installments' });
+LoanInstallment.belongsTo(Loan, { foreignKey: 'loanId', as: 'loan' });
+
 module.exports = {
   sequelize,
   Sequelize,
@@ -195,6 +200,8 @@ module.exports = {
   ComplianceViolation,
   Document,
   TrainingProgress,
-  ScheduledAudit
+  ScheduledAudit,
+  LoanInstallment,
+  Newsletter
 };
 

@@ -2,28 +2,37 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Add attendanceTakenBy column
-    await queryInterface.addColumn('Meetings', 'attendanceTakenBy', {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'Users',
-        key: 'id'
-      },
-      onUpdate: 'CASCADE',
-      onDelete: 'SET NULL',
-      comment: 'User ID who took the attendance'
-    });
+    // Check existing columns
+    const tableDescription = await queryInterface.describeTable('Meetings');
 
-    // Add attendanceTakenAt column
-    await queryInterface.addColumn('Meetings', 'attendanceTakenAt', {
-      type: Sequelize.DATE,
-      allowNull: true,
-      comment: 'Date and time when attendance was taken'
-    });
+    // Add attendanceTakenBy column if it doesn't exist
+    if (!tableDescription.attendanceTakenBy) {
+      await queryInterface.addColumn('Meetings', 'attendanceTakenBy', {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'Users',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL',
+        comment: 'User ID who took the attendance'
+      });
+    }
 
-    // Add index for attendanceTakenBy
-    await queryInterface.addIndex('Meetings', ['attendanceTakenBy']);
+    // Add attendanceTakenAt column if it doesn't exist
+    if (!tableDescription.attendanceTakenAt) {
+      await queryInterface.addColumn('Meetings', 'attendanceTakenAt', {
+        type: Sequelize.DATE,
+        allowNull: true,
+        comment: 'Date and time when attendance was taken'
+      });
+    }
+
+    // Add index for attendanceTakenBy if column exists and index doesn't
+    if (tableDescription.attendanceTakenBy) {
+      await queryInterface.addIndex('Meetings', ['attendanceTakenBy']);
+    }
   },
 
   async down(queryInterface, Sequelize) {

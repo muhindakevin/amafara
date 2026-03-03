@@ -1,13 +1,15 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     // Get branch and group IDs
     const [branches] = await queryInterface.sequelize.query(
-      "SELECT id FROM Branches WHERE code = 'DEMO001' LIMIT 1"
+      "SELECT id FROM \"Branches\" WHERE code = 'DEMO001' LIMIT 1"
     );
     const [groups] = await queryInterface.sequelize.query(
-      "SELECT id FROM Groups WHERE code = 'GRP001' LIMIT 1"
+      "SELECT id FROM \"Groups\" WHERE code = 'GRP001' LIMIT 1"
     );
 
     if (branches.length > 0 && groups.length > 0) {
@@ -18,7 +20,7 @@ module.exports = {
 
       // Check which users already exist
       const existingUsersResult = await queryInterface.sequelize.query(
-        "SELECT phone FROM Users WHERE phone IN ('+250788123456', '+250788234567', '+250788345678', '+250788456789', '+250788567890', '+250788678901')"
+        "SELECT phone FROM \"Users\" WHERE phone IN ('+250788123456', '+250788234567', '+250788345678', '+250788456789', '+250788567890', '+250788678901')"
       );
       const existingUsers = existingUsersResult[0] || [];
       const existingPhones = existingUsers.map(u => u.phone);
@@ -91,6 +93,7 @@ module.exports = {
           phone: '+250788678901',
           name: 'System Administrator',
           email: 'admin@umurengewallet.com',
+          password: bcrypt.hashSync('admin123', 10),
           role: 'System Admin',
           branchId: branchId,
           status: 'active',
@@ -106,7 +109,7 @@ module.exports = {
 
       // Update group agentId
       await queryInterface.sequelize.query(
-        "UPDATE Groups SET agentId = (SELECT id FROM Users WHERE phone = '+250788567890' LIMIT 1) WHERE code = 'GRP001'"
+        "UPDATE \"Groups\" SET \"agentId\" = (SELECT id FROM \"Users\" WHERE phone = '+250788567890' LIMIT 1) WHERE code = 'GRP001'"
       );
     }
   },

@@ -2,10 +2,9 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    // For MySQL/MariaDB, we need to alter the ENUM type
-    // First, check if we're using MySQL
-    const [results] = await queryInterface.sequelize.query("SELECT VERSION() as version");
-    const isMySQL = results && results[0] && results[0].version;
+    // Detect database type
+    const dialect = queryInterface.sequelize.getDialect();
+    const isMySQL = dialect === 'mysql' || dialect === 'mariadb';
     
     if (isMySQL) {
       // MySQL: Alter the ENUM column
@@ -15,22 +14,14 @@ module.exports = {
         DEFAULT 'members' NOT NULL
       `);
     } else {
-      // For PostgreSQL or other databases, use a different approach
-      // Drop the old enum and create a new one
+      // For PostgreSQL, add the new enum value to the existing type
       try {
         await queryInterface.sequelize.query(`
-          ALTER TABLE "LearnGrowContents" 
-          DROP CONSTRAINT IF EXISTS "LearnGrowContents_targetAudience_check"
-        `);
-        
-        await queryInterface.sequelize.query(`
-          ALTER TABLE "LearnGrowContents" 
-          ADD CONSTRAINT "LearnGrowContents_targetAudience_check" 
-          CHECK (targetAudience IN ('members', 'secretary', 'agent', 'both'))
+          ALTER TYPE "enum_LearnGrowContents_targetAudience" ADD VALUE IF NOT EXISTS 'agent'
         `);
       } catch (error) {
-        // If constraint doesn't exist or other error, try column modification
-        console.log('Note: Could not modify enum constraint, may need manual update');
+        // If ADD VALUE fails (e.g., value already exists), continue
+        console.log('Note: Could not add enum value, may already exist:', error.message);
       }
     }
   },

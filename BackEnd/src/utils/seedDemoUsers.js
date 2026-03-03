@@ -85,7 +85,7 @@ async function seedDemoUsers() {
         status: 'active'
       },
       {
-        phone: '+250788678901',
+        phone: '+250786482268',
         name: 'System Administrator',
         email: 'admin@umurengewallet.com',
         role: 'System Admin',
@@ -107,11 +107,19 @@ async function seedDemoUsers() {
       }
     }
 
-    // Update group agentId
-    const agent = await User.findOne({ where: { phone: '+250788567890' } });
-    if (agent) {
-      await group.update({ agentId: agent.id });
-      console.log('✅ Updated group with agent');
+    // Update admin phone number specifically
+    const adminUser = await User.findOne({ where: { email: 'admin@umurengewallet.com' } });
+    if (adminUser) {
+      // Update any existing user with the target phone number to a different phone
+      const conflictingUser = await User.findOne({ where: { phone: '+250786482268', id: { [require('sequelize').Op.ne]: adminUser.id } } });
+      if (conflictingUser) {
+        await conflictingUser.update({ phone: '+250786482269' });
+        console.log('✅ Updated conflicting user phone number');
+      }
+      if (adminUser.phone !== '+250786482268') {
+        await adminUser.update({ phone: '+250786482268' });
+        console.log('✅ Updated System Administrator phone number');
+      }
     }
 
     console.log('✅ Demo users seeded successfully!');

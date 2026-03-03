@@ -5,6 +5,8 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const db = require('./config/db');
+const cron = require('node-cron');
+const { sendDepositReminders, sendRedeositReminders } = require('./src/utils/reminders');
 
 const app = express();
 const path = require('path');
@@ -149,6 +151,8 @@ app.use('/api/secretary/support', require('./src/routes/secretarySupport.routes'
 app.use('/api/secretary/reports', require('./src/routes/secretaryReports.routes'));
 app.use('/api/public', require('./src/routes/public.routes'));
 app.use('/api/member-applications', require('./src/routes/memberApplication.routes'));
+app.use('/api/newsletter', require('./src/routes/newsletter.routes'));
+app.use('/api/contact', require('./src/routes/contact.routes'));
 
 // Health check with database status
 app.get('/api/health', async (req, res) => {
@@ -517,6 +521,17 @@ const startServer = async () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📡 API available at http://localhost:${PORT}/api`);
       console.log(`🔌 Socket.io server ready for real-time connections`);
+    });
+
+    // Schedule daily reminders at 9 AM
+    cron.schedule('0 9 * * *', async () => {
+      console.log('Running scheduled reminders...');
+      try {
+        await sendDepositReminders();
+        await sendRedeositReminders();
+      } catch (error) {
+        console.error('Error running scheduled reminders:', error);
+      }
     });
 
     server.on('error', (err) => {

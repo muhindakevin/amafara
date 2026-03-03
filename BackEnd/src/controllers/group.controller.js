@@ -301,7 +301,7 @@ const getGroupById = async (req, res) => {
  */
 const createGroup = async (req, res) => {
   try {
-    const { name, code, description, branchId, district, sector, cell, contributionAmount, contributionFrequency } = req.body;
+    const { name, code, description, branchId, district, sector, cell, contributionAmount, contributionFrequency, withdrawalRules, growthRate, duration } = req.body;
 
     if (!name || !code) {
       return res.status(400).json({
@@ -329,7 +329,10 @@ const createGroup = async (req, res) => {
       sector,
       cell,
       contributionAmount: contributionAmount ? parseFloat(contributionAmount) : null,
-      contributionFrequency: contributionFrequency || 'monthly'
+      contributionFrequency: contributionFrequency || 'monthly',
+      withdrawalRules,
+      growthRate: growthRate ? parseFloat(growthRate) : null,
+      duration: duration ? parseInt(duration) : null
     });
 
     // Log action
@@ -373,7 +376,7 @@ const createGroup = async (req, res) => {
 const updateGroup = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, code, description, district, sector, cell, status, contributionAmount, contributionFrequency, defaultFineAmount, baseInterestRate } = req.body;
+    const { name, code, description, district, sector, cell, status, contributionAmount, contributionFrequency, defaultFineAmount, baseInterestRate, withdrawalRules, growthRate, duration } = req.body;
 
     const group = await Group.findByPk(id);
     if (!group) {
@@ -420,6 +423,10 @@ const updateGroup = async (req, res) => {
     if (status !== undefined) group.status = status;
     if (contributionAmount !== undefined) group.contributionAmount = contributionAmount ? parseFloat(contributionAmount) : null;
     if (contributionFrequency !== undefined) group.contributionFrequency = contributionFrequency;
+
+    if (withdrawalRules !== undefined) group.withdrawalRules = withdrawalRules;
+    if (growthRate !== undefined) group.growthRate = growthRate ? parseFloat(growthRate) : null;
+    if (duration !== undefined) group.duration = duration ? parseInt(duration) : null;
 
     // If changing contribution settings, ALWAYS create a vote first (don't save yet)
     // Get additional settings from request body

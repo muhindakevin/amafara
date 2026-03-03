@@ -4,13 +4,13 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     // Check if group already exists
     const [existingGroups] = await queryInterface.sequelize.query(
-      "SELECT id FROM Groups WHERE code = 'GRP001' LIMIT 1"
+      "SELECT id FROM \"Groups\" WHERE code = 'GRP001' LIMIT 1"
     );
 
     if (existingGroups.length === 0) {
       // Get branch ID
       const [branches] = await queryInterface.sequelize.query(
-        "SELECT id FROM Branches WHERE code = 'DEMO001' LIMIT 1"
+        "SELECT id FROM \"Branches\" WHERE code = 'DEMO001' LIMIT 1"
       );
 
       if (branches.length > 0) {

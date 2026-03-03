@@ -86,10 +86,10 @@ module.exports = {
     });
 
     // Add indexes
-    await queryInterface.addIndex('ScheduledAudits', ['groupId']);
-    await queryInterface.addIndex('ScheduledAudits', ['scheduledBy']);
-    await queryInterface.addIndex('ScheduledAudits', ['status']);
-    await queryInterface.addIndex('ScheduledAudits', ['scheduledDate']);
+    await queryInterface.sequelize.query('CREATE INDEX IF NOT EXISTS "scheduled_audits_group_id" ON "ScheduledAudits" ("groupId")');
+    await queryInterface.sequelize.query('CREATE INDEX IF NOT EXISTS "scheduled_audits_scheduled_by" ON "ScheduledAudits" ("scheduledBy")');
+    await queryInterface.sequelize.query('CREATE INDEX IF NOT EXISTS "scheduled_audits_status" ON "ScheduledAudits" ("status")');
+    await queryInterface.sequelize.query('CREATE INDEX IF NOT EXISTS "scheduled_audits_scheduled_date" ON "ScheduledAudits" ("scheduledDate")');
   },
 
   down: async (queryInterface, Sequelize) => {

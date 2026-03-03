@@ -4,7 +4,7 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     // Get a system admin user to own default templates
     const [users] = await queryInterface.sequelize.query(
-      "SELECT id FROM Users WHERE role = 'System Admin' LIMIT 1"
+      "SELECT id FROM \"Users\" WHERE role = 'System Admin' LIMIT 1"
     );
     
     const systemAdminId = users.length > 0 ? users[0].id : 1;

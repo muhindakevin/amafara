@@ -6,8 +6,8 @@ module.exports = {
     password: process.env.DB_PASS || '',
     database: process.env.DB_NAME || 'umurenge_wallet',
     host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 3306,
-    dialect: 'mysql',
+    port: process.env.DB_PORT || 5432,
+    dialect: 'postgres',
     logging: console.log
   },
   production: {
@@ -15,8 +15,8 @@ module.exports = {
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
     host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 3306,
-    dialect: 'mysql',
+    port: process.env.DB_PORT || 5432,
+    dialect: 'postgres',
     logging: false
   }
 };

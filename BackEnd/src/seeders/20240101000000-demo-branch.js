@@ -4,7 +4,7 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     // Check if branch already exists
     const [branches] = await queryInterface.sequelize.query(
-      "SELECT id FROM Branches WHERE code = 'DEMO001' LIMIT 1"
+      "SELECT id FROM \"Branches\" WHERE code = 'DEMO001' LIMIT 1"
     );
 
     if (branches.length === 0) {

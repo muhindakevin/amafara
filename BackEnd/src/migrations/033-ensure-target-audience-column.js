@@ -6,7 +6,7 @@ module.exports = {
     const [results] = await queryInterface.sequelize.query(`
       SELECT COLUMN_NAME 
       FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = DATABASE() 
+      WHERE TABLE_SCHEMA = 'public' 
       AND TABLE_NAME = 'LearnGrowContents' 
       AND COLUMN_NAME = 'targetAudience'
     `);

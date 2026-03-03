@@ -1,4 +1,5 @@
 const birdService = require('../../config/bird');
+const nodemailer = require('nodemailer');
 const { Notification, Setting } = require('../models');
 
 /**
@@ -19,7 +20,39 @@ const isEmailEnabled = async () => {
 };
 
 /**
- * Send Email via Bird.com
+ * Send email via SMTP
+ * @param {string} to - Email address
+ * @param {string} subject - Email subject
+ * @param {string} htmlContent - HTML email content
+ */
+const sendSMTPEmail = async (to, subject, htmlContent) => {
+  const hasSmtpConfig = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  if (!hasSmtpConfig) {
+    throw new Error('SMTP not configured');
+  }
+
+  const transporter = nodemailer.createTransporter({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  const mailOptions = {
+    from: process.env.SMTP_USER,
+    to,
+    subject,
+    html: htmlContent,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+/**
+ * Send Email via Bird.com or SMTP fallback
  * @param {string} to - Email address
  * @param {string} subject - Email subject
  * @param {string} htmlContent - HTML email content
@@ -43,12 +76,16 @@ const sendEmail = async (to, subject, htmlContent, userId = null, type = 'email'
 
     return { success: true, message: 'Email sent successfully' };
   } catch (error) {
-    // If service not configured, log but don't fail the main operation
+    // If Bird service not configured, try SMTP fallback
     if (error.message && error.message.includes('not configured')) {
-      console.warn(`⚠️  Email not sent to ${to}: ${error.message}`);
-      // Don't create in-app notification for failed emails
-      // Email failures are logged separately
-      return { success: false, message: 'Email service not configured' };
+      try {
+        await sendSMTPEmail(to, subject, htmlContent);
+        console.log(`Email sent via SMTP to ${to}`);
+        return { success: true, message: 'Email sent successfully via SMTP' };
+      } catch (smtpError) {
+        console.warn(`⚠️  Email not sent to ${to}: SMTP failed - ${smtpError.message}`);
+        return { success: false, message: 'Email service not configured' };
+      }
     }
 
     // Log failed notification for other errors

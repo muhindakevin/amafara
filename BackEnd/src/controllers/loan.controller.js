@@ -12,7 +12,7 @@ const { Op } = require('sequelize');
  */
 const requestLoan = async (req, res) => {
   try {
-    const { amount, purpose, duration, guarantorId, guarantorName, guarantorPhone, guarantorNationalId, guarantorRelationship } = req.body;
+    const { amount, purpose, duration, guarantorId, guarantorName, guarantorPhone, guarantorNationalId, guarantorRelationship, reDepositPeriod, growthRate } = req.body;
     const memberId = req.user.id;
 
     if (!amount || !purpose || !duration) {
@@ -473,6 +473,42 @@ const approveLoan = async (req, res) => {
       loan.nextPaymentDate.setMonth(loan.nextPaymentDate.getMonth() + 1);
     }
     await loan.save();
+
+    // Generate re-deposit schedule if reDepositPeriod is set
+    if (loan.reDepositPeriod && loan.reDepositPeriod > 0 && loan.growthRate !== null && loan.growthRate !== undefined) {
+      try {
+        const { LoanInstallment } = require('../models');
+        const totalGrowth = loan.amount * (loan.growthRate / 100) * (loan.reDepositPeriod / 12);
+        const totalAmount = loan.amount + totalGrowth;
+        const installmentAmount = totalAmount / loan.reDepositPeriod;
+        const growthPerInstallment = totalGrowth / loan.reDepositPeriod;
+
+        const installments = [];
+        const startDate = disbursementDate ? new Date(disbursementDate) : new Date(approvalDate);
+        startDate.setMonth(startDate.getMonth() + 1); // First payment 1 month after approval/disbursement
+
+        for (let i = 0; i < loan.reDepositPeriod; i++) {
+          const dueDate = new Date(startDate);
+          dueDate.setMonth(dueDate.getMonth() + i);
+
+          installments.push({
+            loanId: loan.id,
+            installmentNumber: i + 1,
+            amount: loan.amount / loan.reDepositPeriod, // Principal portion
+            growthAmount: growthPerInstallment,
+            totalAmount: installmentAmount,
+            dueDate: dueDate,
+            status: 'pending'
+          });
+        }
+
+        await LoanInstallment.bulkCreate(installments);
+        console.log(`[approveLoan] Generated ${installments.length} re-deposit installments for loan ${loan.id}`);
+      } catch (installmentError) {
+        console.error('[approveLoan] Error generating installments:', installmentError);
+        // Don't fail the approval if installment generation fails
+      }
+    }
 
     // Create transaction record
     await Transaction.create({
@@ -1388,6 +1424,81 @@ const getLoanStats = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get installments for a loan
+ * GET /api/loans/:id/installments
+ */
+const getLoanInstallments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const installments = await LoanInstallment.findAll({
+      where: { loanId: id },
+      order: [['installmentNumber', 'ASC']]
+    });
+    res.json({ success: true, data: installments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch installments' });
+  }
+};
+
+/**
+ * Make payment for an installment
+ * POST /api/loans/installments/:id/pay
+ */
+const makeInstallmentPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, paymentMethod } = req.body;
+    const memberId = req.user.id;
+
+    const installment = await LoanInstallment.findByPk(id, {
+      include: [{ model: Loan, as: 'loan', include: [{ model: User, as: 'member' }] }]
+    });
+
+    if (!installment) return res.status(404).json({ success: false, message: 'Installment not found' });
+
+    if (installment.loan.memberId !== memberId) return res.status(403).json({ success: false, message: 'Not your installment' });
+
+    if (installment.status === 'paid') return res.status(400).json({ success: false, message: 'Already paid' });
+
+    const paymentAmount = parseFloat(amount);
+    if (paymentAmount < installment.totalAmount) return res.status(400).json({ success: false, message: 'Amount less than required' });
+
+    // Update installment
+    installment.status = 'paid';
+    installment.paidDate = new Date();
+    installment.paidAmount = paymentAmount;
+    await installment.save();
+
+    // Update loan
+    const loan = installment.loan;
+    loan.remainingAmount = Math.max(0, parseFloat(loan.remainingAmount || 0) - paymentAmount);
+    if (loan.remainingAmount <= 0) loan.status = 'completed';
+    await loan.save();
+
+    // Create transaction
+    await Transaction.create({
+      userId: memberId,
+      type: 'installment_payment',
+      amount: paymentAmount,
+      balance: loan.member.totalSavings,
+      status: 'completed',
+      referenceId: installment.id.toString(),
+      referenceType: 'LoanInstallment',
+      paymentMethod: paymentMethod || 'cash',
+      description: `Installment payment for loan ${loan.id}`
+    });
+
+    logAction(memberId, 'INSTALLMENT_PAYMENT', 'LoanInstallment', installment.id, { amount: paymentAmount }, req);
+
+    res.json({ success: true, message: 'Payment successful', data: installment });
+  } catch (error) {
+    console.error('Installment payment error:', error);
+    res.status(500).json({ success: false, message: 'Payment failed', error: error.message });
+  }
+};
+
 
 module.exports = {
   requestLoan,

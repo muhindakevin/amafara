@@ -125,6 +125,16 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Relationship to borrower (e.g., family member, friend, colleague)'
     },
+    reDepositPeriod: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Period in months for re-depositing the withdrawn amount'
+    },
+    growthRate: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      comment: 'Growth rate applied to the re-deposit amount'
+    },
     createdAt: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -139,6 +149,14 @@ module.exports = (sequelize, DataTypes) => {
     tableName: 'Loans',
     timestamps: true
   });
+
+  Loan.associate = function(models) {
+    Loan.hasMany(models.LoanInstallment, { foreignKey: 'loanId', as: 'installments' });
+    Loan.belongsTo(models.User, { foreignKey: 'memberId', as: 'member' });
+    Loan.belongsTo(models.Group, { foreignKey: 'groupId', as: 'group' });
+    Loan.belongsTo(models.User, { foreignKey: 'approvedBy', as: 'approver' });
+    Loan.belongsTo(models.User, { foreignKey: 'guarantorId', as: 'guarantor' });
+  };
 
   return Loan;
 };
