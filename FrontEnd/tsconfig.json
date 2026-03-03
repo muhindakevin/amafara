@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": ["src"],
+  "exclude": [
+    "generate-all-translations.js",
+    "generate-translations.js",
+    "postcss.config.js",
+    "quick-update-translations.js",
+    "scripts/generate-language-files.js"
+  ]
+}
