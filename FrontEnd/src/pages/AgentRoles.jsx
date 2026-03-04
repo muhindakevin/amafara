@@ -850,69 +850,53 @@ function AgentRoles() {
         </div>
 
         {/* Filters */}
-        <div className="card">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Search Users
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, phone, email, national ID, or ID..."
-                  className="input-field pl-10"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Filter by Group
-              </label>
-              <select
-                value={filterGroup}
-                onChange={(e) => setFilterGroup(e.target.value)}
-                className="input-field"
-              >
-                <option value="all">All Groups</option>
-                {groups.map(group => (
-                  <option key={group.id} value={group.id}>{group.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Filter by Role
-              </label>
-              <select
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
-                className="input-field"
-              >
-                <option value="all">All Roles</option>
-                <option value="Group Admin">Group Admin</option>
-                <option value="Cashier">Cashier</option>
-                <option value="Secretary">Secretary</option>
-                <option value="Member">Member</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Filter by Status
-              </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="input-field"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="pending">Pending</option>
-                <option value="suspended">Suspended</option>
-              </select>
-            </div>
+        <div className="card flex flex-col md:flex-row items-center gap-2">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by name, phone, email, national ID, or ID..."
+              className="input-field pl-9 py-2 text-sm"
+            />
+          </div>
+          <div className="w-full md:w-auto">
+            <select
+              value={filterGroup}
+              onChange={(e) => setFilterGroup(e.target.value)}
+              className="input-field py-2 text-sm"
+            >
+              <option value="all">All Groups</option>
+              {groups.map(group => (
+                <option key={group.id} value={group.id}>{group.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full md:w-auto">
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="input-field py-2 text-sm"
+            >
+              <option value="all">All Roles</option>
+              <option value="Group Admin">Group Admin</option>
+              <option value="Cashier">Cashier</option>
+              <option value="Secretary">Secretary</option>
+              <option value="Member">Member</option>
+            </select>
+          </div>
+          <div className="w-full md:w-auto">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="input-field py-2 text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="suspended">Suspended</option>
+            </select>
           </div>
         </div>
 

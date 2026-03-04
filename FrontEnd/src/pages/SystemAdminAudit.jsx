@@ -213,20 +213,20 @@ function SystemAdminAudit() {
                 </div>
 
                 {/* Search and Filter */}
-                <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="flex flex-col md:flex-row items-center gap-2">
                   <div className="relative flex-1 w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={18} />
                     <input
                       type="text"
                       placeholder={tSystemAdmin('searchAuditLogs', { defaultValue: 'Search audit logs...' })}
-                      className="input-field pl-10 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                      className="input-field pl-9 py-2 text-sm dark:bg-gray-700 dark:text-white dark:border-gray-600"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
                   <div className="w-full md:w-auto">
                     <select
-                      className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                      className="input-field py-2 text-sm dark:bg-gray-700 dark:text-white dark:border-gray-600"
                       value={filterType}
                       onChange={(e) => setFilterType(e.target.value)}
                     >
@@ -240,7 +240,7 @@ function SystemAdminAudit() {
                   </div>
                   <div className="w-full md:w-auto">
                     <select
-                      className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                      className="input-field py-2 text-sm dark:bg-gray-700 dark:text-white dark:border-gray-600"
                       value={filterUser}
                       onChange={(e) => setFilterUser(e.target.value)}
                     >

@@ -4,6 +4,7 @@ import './i18n' // Initialize i18next
 import { LanguageProvider } from './contexts/LanguageContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { ToastProvider } from './contexts/ToastContext'
 
 // Import pages
 import LandingPage from './pages/LandingPage'
@@ -212,14 +213,15 @@ function App() {
 
   return (
     <LanguageProvider>
-      <NotificationProvider>
-        <UserContext.Provider value={{ user, setUser }}>
-          <Router
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true
-            }}
-          >
+      <ToastProvider>
+        <NotificationProvider>
+          <UserContext.Provider value={{ user, setUser }}>
+            <Router
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true
+              }}
+            >
             <Routes>
               {/* Landing Page - Always Light Mode */}
               <Route path="/" element={
@@ -329,8 +331,9 @@ function App() {
           </Router>
         </UserContext.Provider>
       </NotificationProvider>
-    </LanguageProvider>
-  )
+    </ToastProvider>
+  </LanguageProvider>
+)
 }
 
 export default App

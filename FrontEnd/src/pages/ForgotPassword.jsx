@@ -49,29 +49,35 @@ function ForgotPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700 p-4">
-        <div className="max-w-md w-full">
+      <div className="min-h-screen bg-white flex flex-col lg:flex-row">
+        {/* Form Section - 50% on desktop, full on mobile */}
+        <div className="lg:w-1/2 w-full flex items-center justify-center p-8">
+          <div className="w-full max-w-md">
           {/* Logo/Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center mb-4">
-              <img 
-                src="/assets/images/wallet.png" 
-                alt="IKIMINA WALLET" 
-                className="h-20 w-[180px] object-cover"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  const fallback = e.target.nextElementSibling;
-                  if (fallback) fallback.style.display = 'block';
-                }}
-              />
-              <span className="text-3xl font-bold text-primary-600 hidden">IKIMINA WALLET</span>
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="flex flex-col items-center justify-center mb-4 sm:mb-6">
+              <div className="relative mb-3 sm:mb-4">
+                {/* Logo */}
+                <img 
+                  src="/assets/images/wallet.png" 
+                  alt="IKIMINA WALLET Logo" 
+                  className="h-16 sm:h-20 md:h-24 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[200px] object-contain"
+                  onError={(e) => {
+                    e.target.style.display = 'none'
+                    const fallback = e.target.parentElement?.querySelector('.logo-fallback')
+                    if (fallback) fallback.style.display = 'block'
+                  }}
+                />
+                <div className="logo-fallback hidden text-2xl sm:text-3xl font-bold text-primary-600 py-3 sm:py-4">
+                  IW
+                </div>
+              </div>
+              <p className="text-gray-600 text-sm sm:text-base md:text-lg font-medium px-4">{t('digitalMicrofinancePlatform')}</p>
             </div>
-            <h1 className="text-4xl font-bold text-white mb-2">IKIMINA WALLET</h1>
-            <p className="text-blue-100">{t('digitalMicrofinancePlatform')}</p>
           </div>
 
           {/* Success Card */}
-          <div className="card bg-white/95 backdrop-blur-lg">
+          <div className="animate-slide-in">
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
                 <CheckCircle className="text-green-600" size={32} />
@@ -94,51 +100,71 @@ function ForgotPassword() {
               </button>
             </div>
           </div>
+          </div>
+        </div>
+
+        {/* Image Section - 50% on desktop, full on mobile */}
+        <div className="lg:w-1/2 w-full min-h-[50vh] lg:min-h-screen relative">
+          <img 
+            src="https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&h=600&fit=crop&q=80" 
+            alt="Community savings group" 
+            className="w-full h-full object-cover" 
+          />
+          {/* Dark Overlay */}
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center text-white text-xl font-semibold text-center px-4 animate-slide-in">
+            <p>Empowering Rwanda's Saving Communities<br />Through Digital Microfinance</p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700 p-4">
-      <div className="max-w-md w-full">
+    <div className="min-h-screen bg-white flex flex-col lg:flex-row">
+      {/* Form Section - 50% on desktop, full on mobile */}
+      <div className="lg:w-1/2 w-full flex items-center justify-center p-8">
+        <div className="w-full max-w-md">
         {/* Logo/Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-4">
-            <img 
-              src="/assets/images/wallet.png" 
-              alt="IKIMINA WALLET" 
-              className="h-20 w-auto object-contain"
-              onError={(e) => {
-                e.target.style.display = 'none';
-                const fallback = e.target.nextElementSibling;
-                if (fallback) fallback.style.display = 'block';
-              }}
-            />
-            <span className="text-3xl font-bold text-primary-600 hidden">IKIMINA WALLET</span>
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="flex flex-col items-center justify-center mb-4 sm:mb-6">
+            <div className="relative mb-3 sm:mb-4">
+              {/* Logo */}
+              <img 
+                src="/assets/images/wallet.png" 
+                alt="IKIMINA WALLET Logo" 
+                className="h-16 sm:h-20 md:h-24 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[200px] object-contain"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                  const fallback = e.target.parentElement?.querySelector('.logo-fallback')
+                  if (fallback) fallback.style.display = 'block'
+                }}
+              />
+              <div className="logo-fallback hidden text-2xl sm:text-3xl font-bold text-primary-600 py-3 sm:py-4">
+                IW
+              </div>
+            </div>
+            <p className="text-gray-600 text-sm sm:text-base md:text-lg font-medium px-4">{t('digitalMicrofinancePlatform')}</p>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">IKIMINA WALLET</h1>
-          <p className="text-blue-100">{t('digitalMicrofinancePlatform')}</p>
         </div>
 
         {/* Forgot Password Card */}
-        <div className="card bg-white/95 backdrop-blur-lg">
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
+        <div className="animate-slide-in">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">
             {t('forgotPassword', { defaultValue: 'Forgot Password?' })}
           </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+          <p className="text-sm text-gray-600 mb-4 sm:mb-6">
             {t('enterEmailOrPhoneForReset', { defaultValue: 'Enter your email or phone number, and we\'ll send you a link to reset your password.' })}
           </p>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <div className="mb-4 sm:mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('emailOrPhone')}
               </label>
               <div className="relative">
@@ -153,7 +179,7 @@ function ForgotPassword() {
                     }
                   }}
                   placeholder={t('emailOrPhonePlaceholder', { defaultValue: 'you@example.com or +2507...' })}
-                  className="input-field pl-12 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                  className="input-field pl-12 !focus:border-amber-600"
                   disabled={submitting}
                 />
               </div>
@@ -177,11 +203,25 @@ function ForgotPassword() {
           <button
             onClick={() => navigate('/login')}
             disabled={submitting}
-            className="mt-4 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-500 font-medium w-full disabled:opacity-50 flex items-center justify-center gap-2"
+            className="mt-4 text-sm text-amber-600 hover:text-amber-700 font-medium w-full disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <ArrowLeft size={16} />
             {t('backToLogin')}
           </button>
+        </div>
+        </div>
+      </div>
+
+      {/* Image Section - 50% on desktop, full on mobile */}
+      <div className="lg:w-1/2 w-full min-h-[50vh] lg:min-h-screen relative">
+        <img 
+          src="https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&h=600&fit=crop&q=80" 
+          alt="Community savings group" 
+          className="w-full h-full object-cover" 
+        />
+        {/* Dark Overlay */}
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center text-white text-xl font-semibold text-center px-4 animate-slide-in">
+          <p>Empowering Rwanda's Saving Communities<br />Through Digital Microfinance</p>
         </div>
       </div>
     </div>

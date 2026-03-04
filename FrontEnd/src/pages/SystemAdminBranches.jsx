@@ -208,20 +208,20 @@ function SystemAdminBranches() {
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('branchLocationManagement', { defaultValue: 'Branch & Location Management' })}</h1>
 
         {/* Search and Filter */}
-        <div className="card flex flex-col md:flex-row items-center gap-4">
+        <div className="card flex flex-col md:flex-row items-center gap-2">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
               placeholder={t('searchBranchesByNameLocation', { defaultValue: 'Search branches by name or location...' })}
-              className="input-field pl-10"
+              className="input-field pl-9 py-2 text-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="w-full md:w-auto">
             <select
-              className="input-field"
+              className="input-field py-2 text-sm"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
             >
@@ -233,9 +233,9 @@ function SystemAdminBranches() {
           </div>
           <button
             onClick={() => setShowAddBranch(true)}
-            className="btn-primary flex items-center gap-2 w-full md:w-auto"
+            className="btn-primary flex items-center gap-1 px-2 py-2 text-sm w-full md:w-auto"
           >
-            <Plus size={20} /> {t('createBranch', { defaultValue: 'Create Branch' })}
+            <Plus size={16} /> {t('createBranch', { defaultValue: 'Create' })}
           </button>
         </div>
 

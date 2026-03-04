@@ -470,20 +470,20 @@ function SystemAdminLoans() {
                 <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Loan Requests</h2>
 
                 {/* Search and Filter */}
-                <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="flex flex-col md:flex-row items-center gap-2">
                   <div className="relative flex-1 w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input
                       type="text"
                       placeholder="Search loan requests..."
-                      className="input-field pl-10"
+                      className="input-field pl-9 py-2 text-sm"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
                   <div className="w-full md:w-auto">
                     <select
-                      className="input-field"
+                      className="input-field py-2 text-sm"
                       value={filterStatus}
                       onChange={(e) => setFilterStatus(e.target.value)}
                     >

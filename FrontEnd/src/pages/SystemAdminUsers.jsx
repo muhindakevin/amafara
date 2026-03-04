@@ -453,20 +453,20 @@ function SystemAdminUsers() {
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('userManagement', { defaultValue: 'User Management' })}</h1>
 
         {/* Search and Filter */}
-        <div className="card flex flex-col md:flex-row items-center gap-4">
+        <div className="card flex flex-col md:flex-row items-center gap-2">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
               placeholder={t('searchUsersByNameEmailPhone', { defaultValue: 'Search users by name, email, phone, or group...' })}
-              className="input-field pl-10 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+              className="input-field pl-9 py-2 text-sm dark:bg-gray-700 dark:text-white dark:border-gray-600"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="w-full md:w-auto">
             <select
-              className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
+              className="input-field py-2 text-sm dark:bg-gray-700 dark:text-white dark:border-gray-600"
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
             >
@@ -476,7 +476,7 @@ function SystemAdminUsers() {
           </div>
           <div className="w-full md:w-auto">
             <select
-              className="input-field dark:bg-gray-700 dark:text-white dark:border-gray-600"
+              className="input-field py-2 text-sm dark:bg-gray-700 dark:text-white dark:border-gray-600"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
             >
@@ -488,15 +488,15 @@ function SystemAdminUsers() {
           </div>
           <button
             onClick={() => setShowAddUser(true)}
-            className="btn-primary flex items-center gap-2 w-full md:w-auto"
+            className="btn-primary flex items-center gap-1 px-2 py-2 text-sm w-full md:w-auto"
           >
-            <Plus size={20} /> {t('registerUser', { defaultValue: 'Register User' })}
+            <Plus size={16} /> {t('registerUser', { defaultValue: 'Register' })}
           </button>
           <button
             onClick={handleExportUsers}
-            className="btn-secondary flex items-center gap-2 w-full md:w-auto"
+            className="btn-secondary flex items-center gap-1 px-2 py-2 text-sm w-full md:w-auto"
           >
-            <Download size={20} /> {t('export', { defaultValue: 'Export' })}
+            <Download size={16} /> {t('export', { defaultValue: 'Export' })}
           </button>
         </div>
 
